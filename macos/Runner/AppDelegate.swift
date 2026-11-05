@@ -51,6 +51,25 @@ class AppDelegate: FlutterAppDelegate {
         self.pendingFilePaths.removeAll()
         self.logDebug("Returning getInitialFiles: \(files)")
         result(files)
+      } else if call.method == "shareFile" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+          result(false)
+          return
+        }
+        let url = URL(fileURLWithPath: path)
+        DispatchQueue.main.async {
+          if let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first,
+             let contentView = window.contentView {
+            let picker = NSSharingServicePicker(items: [url])
+            picker.show(relativeTo: CGRect(x: contentView.bounds.midX, y: contentView.bounds.midY, width: 0, height: 0),
+                        of: contentView,
+                        preferredEdge: .minY)
+            result(true)
+          } else {
+            result(false)
+          }
+        }
       } else {
         result(FlutterMethodNotImplemented)
       }

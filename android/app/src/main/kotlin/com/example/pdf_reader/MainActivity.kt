@@ -29,12 +29,62 @@ class MainActivity : FlutterActivity() {
                     pendingFilePaths.clear()
                     result.success(files)
                 }
+                "shareFile" -> {
+                    val filePath = call.argument<String>("path")
+                    val title = call.argument<String>("title") ?: "PDF Paylaş"
+                    if (filePath != null) {
+                        sharePdfFile(filePath, title, result)
+                    } else {
+                        result.error("INVALID_ARGS", "File path is required", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
 
         // Handle the intent that launched this activity
         handleIntent(intent)
+    }
+
+    private fun sharePdfFile(filePath: String, title: String, result: MethodChannel.Result) {
+        try {
+            val sourceFile = File(filePath)
+            if (!sourceFile.exists()) {
+                result.error("FILE_NOT_FOUND", "Dosya bulunamadı: $filePath", null)
+                return
+            }
+
+            // Copy to cache/shared_pdfs to ensure FileProvider can always serve it safely
+            val shareDir = File(cacheDir, "shared_pdfs")
+            if (!shareDir.exists()) {
+                shareDir.mkdirs()
+            }
+            val targetFile = File(shareDir, sourceFile.name)
+            if (sourceFile.absolutePath != targetFile.absolutePath) {
+                sourceFile.copyTo(targetFile, overwrite = true)
+            }
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                targetFile
+            )
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, sourceFile.name)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val chooser = Intent.createChooser(shareIntent, title)
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(chooser)
+            result.success(true)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            result.error("SHARE_ERROR", e.localizedMessage, null)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

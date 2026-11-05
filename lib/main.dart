@@ -90,8 +90,8 @@ class _PdfReaderAppState extends State<PdfReaderApp> {
 
 class PdfTab {
   final String id;
-  final String filePath;
-  final String fileName;
+  String filePath;
+  String fileName;
   final PdfViewerController controller;
   PdfDocument? document;
   int currentPage;
@@ -559,6 +559,275 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
   String _getFileName(String path) {
     return path.split(Platform.pathSeparator).last;
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.redAccent : const Color(0xFF0F766E),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<void> _shareActiveDocument() async {
+    final activeTab = _activeTab;
+    if (activeTab == null) return;
+    try {
+      final file = File(activeTab.filePath);
+      if (!file.existsSync()) {
+        _showSnackBar('Paylaşılacak dosya bulunamadı: ${activeTab.filePath}', isError: true);
+        return;
+      }
+
+      await _openFileChannel.invokeMethod('shareFile', {
+        'path': activeTab.filePath,
+        'title': activeTab.fileName,
+      });
+    } catch (e) {
+      _showSnackBar('Paylaşım başlatılamadı: $e', isError: true);
+    }
+  }
+
+  Future<void> _saveActiveDocumentAs() async {
+    final activeTab = _activeTab;
+    if (activeTab == null) return;
+    try {
+      final file = File(activeTab.filePath);
+      if (!file.existsSync()) {
+        _showSnackBar('Kaynak dosya bulunamadı: ${activeTab.filePath}', isError: true);
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      final uri = await FilePicker.saveFile(
+        fileName: activeTab.fileName,
+        bytes: bytes,
+        mimeType: 'application/pdf',
+        dialogTitle: 'PDF Dosyasını Kaydet',
+      );
+
+      if (uri != null) {
+        _showSnackBar('Dosya başarıyla kaydedildi: ${activeTab.fileName}');
+      }
+    } catch (e) {
+      _showSnackBar('Dosya kaydedilemedi: $e', isError: true);
+    }
+  }
+
+  Future<void> _moveActiveDocument() async {
+    final activeTab = _activeTab;
+    if (activeTab == null) return;
+    try {
+      final file = File(activeTab.filePath);
+      if (!file.existsSync()) {
+        _showSnackBar('Kaynak dosya bulunamadı: ${activeTab.filePath}', isError: true);
+        return;
+      }
+
+      final targetDir = await FilePicker.getDirectoryPath(
+        dialogTitle: 'Taşınacak Hedef Klasörü Seçin',
+      );
+      if (targetDir == null || targetDir.isEmpty) return;
+
+      final targetFile = File('$targetDir${Platform.pathSeparator}${activeTab.fileName}');
+      if (targetFile.path == file.path) {
+        _showSnackBar('Dosya zaten bu klasörde bulunuyor.');
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      await targetFile.writeAsBytes(bytes);
+
+      try {
+        await file.delete();
+      } catch (_) {}
+
+      setState(() {
+        activeTab.filePath = targetFile.path;
+      });
+
+      _showSnackBar('Dosya başarıyla taşındı:\n${targetFile.path}');
+    } catch (e) {
+      _showSnackBar('Dosya taşınamadı: $e', isError: true);
+    }
+  }
+
+  Future<void> _renameActiveDocument() async {
+    final activeTab = _activeTab;
+    if (activeTab == null) return;
+
+    final file = File(activeTab.filePath);
+    if (!file.existsSync()) {
+      _showSnackBar('Kaynak dosya bulunamadı', isError: true);
+      return;
+    }
+
+    final currentBaseName = activeTab.fileName.toLowerCase().endsWith('.pdf')
+        ? activeTab.fileName.substring(0, activeTab.fileName.length - 4)
+        : activeTab.fileName;
+
+    final textController = TextEditingController(text: currentBaseName);
+
+    final newBaseName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.edit_rounded, size: 20),
+            SizedBox(width: 8),
+            Text('Yeniden Adlandır'),
+          ],
+        ),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Yeni Dosya Adı',
+            suffixText: '.pdf',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (val) => Navigator.pop(ctx, val.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, textController.text.trim()),
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
+
+    if (newBaseName == null || newBaseName.isEmpty || newBaseName == currentBaseName) {
+      return;
+    }
+
+    final sanitized = newBaseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final newFileName = '$sanitized.pdf';
+    final newPath = '${file.parent.path}${Platform.pathSeparator}$newFileName';
+
+    try {
+      final renamedFile = await file.rename(newPath);
+      setState(() {
+        activeTab.fileName = newFileName;
+        activeTab.filePath = renamedFile.path;
+      });
+      _showSnackBar('Dosya yeniden adlandırıldı: $newFileName');
+    } catch (_) {
+      try {
+        final newFile = File(newPath);
+        await newFile.writeAsBytes(await file.readAsBytes());
+        await file.delete();
+        setState(() {
+          activeTab.fileName = newFileName;
+          activeTab.filePath = newFile.path;
+        });
+        _showSnackBar('Dosya yeniden adlandırıldı: $newFileName');
+      } catch (err) {
+        _showSnackBar('Yeniden adlandırılamadı: $err', isError: true);
+      }
+    }
+  }
+
+  Future<void> _showDocumentInfo() async {
+    final activeTab = _activeTab;
+    if (activeTab == null) return;
+
+    int fileSize = 0;
+    DateTime? lastModified;
+    try {
+      final f = File(activeTab.filePath);
+      if (f.existsSync()) {
+        fileSize = f.lengthSync();
+        lastModified = f.lastModifiedSync();
+      }
+    } catch (_) {}
+
+    String formatBytes(int bytes) {
+      if (bytes < 1024) return '$bytes B';
+      if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    }
+
+    String formatDate(DateTime dt) {
+      return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: Colors.blueAccent),
+            SizedBox(width: 8),
+            Text('Belge Bilgileri'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow('Dosya Adı', activeTab.fileName, isDark),
+            const SizedBox(height: 10),
+            _buildInfoRow('Sayfa Sayısı', '${_totalPages > 0 ? _totalPages : activeTab.totalPages} sayfa', isDark),
+            const SizedBox(height: 10),
+            if (fileSize > 0) ...[
+              _buildInfoRow('Dosya Boyutu', formatBytes(fileSize), isDark),
+              const SizedBox(height: 10),
+            ],
+            if (lastModified != null) ...[
+              _buildInfoRow('Son Düzenleme', formatDate(lastModified), isDark),
+              const SizedBox(height: 10),
+            ],
+            _buildInfoRow('Konum', activeTab.filePath, isDark, isPath: true),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Kapat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, bool isDark, {bool isPath = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: isPath ? 11 : 13,
+            fontWeight: isPath ? FontWeight.normal : FontWeight.w600,
+            color: isPath && isDark ? Colors.grey.shade300 : null,
+          ),
+          maxLines: isPath ? 3 : 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
   }
 
   void _showThumbnailsBottomSheet(BuildContext context) {
@@ -1105,7 +1374,67 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             ),
           ),
 
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, size: 18),
+            tooltip: 'Paylaş',
+            onPressed: _shareActiveDocument,
+          ),
+          IconButton(
+            icon: const Icon(Icons.save_alt_rounded, size: 18),
+            tooltip: 'Farklı Kaydet',
+            onPressed: _saveActiveDocumentAs,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz_rounded, size: 18),
+            tooltip: 'Diğer İşlemler',
+            onSelected: (value) {
+              switch (value) {
+                case 'move':
+                  _moveActiveDocument();
+                  break;
+                case 'rename':
+                  _renameActiveDocument();
+                  break;
+                case 'info':
+                  _showDocumentInfo();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'move',
+                child: Row(
+                  children: [
+                    Icon(Icons.drive_file_move_rounded, size: 18),
+                    SizedBox(width: 8),
+                    Text('Dosyayı Taşı...'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'rename',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_rounded, size: 18),
+                    SizedBox(width: 8),
+                    Text('Yeniden Adlandır...'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'info',
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 18),
+                    SizedBox(width: 8),
+                    Text('Belge Bilgileri'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
           Container(height: 18, width: 1, color: borderColor),
           const SizedBox(width: 6),
 
@@ -1320,6 +1649,11 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
           ),
         ],
         IconButton(
+          icon: const Icon(Icons.share_rounded, size: 21),
+          tooltip: 'Paylaş',
+          onPressed: _shareActiveDocument,
+        ),
+        IconButton(
           icon: Icon(
             isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
             size: 21,
@@ -1331,6 +1665,21 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
           icon: const Icon(Icons.more_vert_rounded),
           onSelected: (value) {
             switch (value) {
+              case 'share':
+                _shareActiveDocument();
+                break;
+              case 'save_as':
+                _saveActiveDocumentAs();
+                break;
+              case 'move':
+                _moveActiveDocument();
+                break;
+              case 'rename':
+                _renameActiveDocument();
+                break;
+              case 'info':
+                _showDocumentInfo();
+                break;
               case 'open':
                 _pickAndOpenFile();
                 break;
@@ -1352,6 +1701,57 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             }
           },
           itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'share',
+              child: Row(
+                children: [
+                  Icon(Icons.share_rounded, size: 18, color: Colors.blueAccent),
+                  SizedBox(width: 10),
+                  Text('Paylaş (WhatsApp, vb.)'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'save_as',
+              child: Row(
+                children: [
+                  Icon(Icons.save_alt_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Farklı Kaydet...'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'move',
+              child: Row(
+                children: [
+                  Icon(Icons.drive_file_move_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Dosyayı Taşı...'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'rename',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Yeniden Adlandır...'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'info',
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Belge Bilgileri'),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
             const PopupMenuItem(
               value: 'open',
               child: Row(
