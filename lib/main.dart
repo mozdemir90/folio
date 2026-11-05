@@ -143,6 +143,7 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
   bool _isLoading = false;
 
   final ScrollController _thumbnailScrollController = ScrollController();
+  static const MethodChannel _openFileChannel = MethodChannel('folio/open_file');
 
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
   String get _modKey => Platform.isMacOS ? '⌘' : 'Ctrl';
@@ -152,8 +153,44 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
     super.initState();
     _isSidebarVisible = !_isMobile;
 
+    _initOpenFileChannel();
+
     if (widget.initialFilePath != null) {
       _checkAndOpenFile(widget.initialFilePath!);
+    }
+  }
+
+  void _initOpenFileChannel() {
+    _openFileChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onOpenFiles') {
+        final args = call.arguments;
+        if (args is List) {
+          for (final item in args) {
+            if (item != null && item.toString().trim().isNotEmpty) {
+              _checkAndOpenFile(item.toString());
+            }
+          }
+        } else if (args != null && args.toString().trim().isNotEmpty) {
+          _checkAndOpenFile(args.toString());
+        }
+      }
+    });
+
+    _checkInitialFilesFromChannel();
+  }
+
+  Future<void> _checkInitialFilesFromChannel() async {
+    try {
+      final result = await _openFileChannel.invokeMethod<dynamic>('getInitialFiles');
+      if (result is List && result.isNotEmpty) {
+        for (final item in result) {
+          if (item != null && item.toString().trim().isNotEmpty) {
+            _checkAndOpenFile(item.toString());
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Initial files error: $e');
     }
   }
 
@@ -234,7 +271,20 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
     }
   }
 
-  void _checkAndOpenFile(String path) {
+  void _checkAndOpenFile(String rawPath) {
+    var path = rawPath.trim();
+    if (path.startsWith('file://')) {
+      final uri = Uri.tryParse(path);
+      if (uri != null) {
+        try {
+          path = uri.toFilePath();
+        } catch (_) {
+          path = uri.path;
+        }
+      }
+    }
+    if (path.isEmpty) return;
+
     try {
       final f = File(path);
       if (f.existsSync() && f.lengthSync() > 5) {
