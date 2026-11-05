@@ -28,12 +28,20 @@ class PdfReaderApp extends StatefulWidget {
 }
 
 class _PdfReaderAppState extends State<PdfReaderApp> {
-  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode _themeMode = ThemeMode.system;
 
   void _toggleTheme() {
     setState(() {
-      _themeMode =
-          _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+      final systemDark =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+              Brightness.dark;
+      if (_themeMode == ThemeMode.system) {
+        _themeMode = systemDark ? ThemeMode.light : ThemeMode.dark;
+      } else if (_themeMode == ThemeMode.dark) {
+        _themeMode = ThemeMode.light;
+      } else {
+        _themeMode = ThemeMode.dark;
+      }
     });
   }
 
@@ -74,22 +82,41 @@ class _PdfReaderAppState extends State<PdfReaderApp> {
       ),
       home: PdfViewerHomeScreen(
         initialFilePath: widget.initialFilePath,
-        isDarkMode: _themeMode == ThemeMode.dark,
         onToggleTheme: _toggleTheme,
       ),
     );
   }
 }
 
+class PdfTab {
+  final String id;
+  final String filePath;
+  final String fileName;
+  final PdfViewerController controller;
+  PdfDocument? document;
+  int currentPage;
+  int totalPages;
+  double zoomRatio;
+
+  PdfTab({
+    required this.id,
+    required this.filePath,
+    required this.fileName,
+    required this.controller,
+    this.document,
+    this.currentPage = 1,
+    this.totalPages = 0,
+    this.zoomRatio = 1.0,
+  });
+}
+
 class PdfViewerHomeScreen extends StatefulWidget {
   final String? initialFilePath;
-  final bool isDarkMode;
   final VoidCallback onToggleTheme;
 
   const PdfViewerHomeScreen({
     super.key,
     this.initialFilePath,
-    required this.isDarkMode,
     required this.onToggleTheme,
   });
 
@@ -98,23 +125,32 @@ class PdfViewerHomeScreen extends StatefulWidget {
 }
 
 class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
-  String? _filePath;
-  PdfViewerController? _pdfController;
-  PdfDocument? _document;
+  final List<PdfTab> _tabs = [];
+  int _activeTabIndex = -1;
 
-  int _currentPage = 1;
-  int _totalPages = 0;
-  double _zoomRatio = 1.0;
-  bool _isSidebarVisible = true;
+  PdfTab? get _activeTab =>
+      (_tabs.isNotEmpty && _activeTabIndex >= 0 && _activeTabIndex < _tabs.length)
+          ? _tabs[_activeTabIndex]
+          : null;
+
+  PdfViewerController? get _pdfController => _activeTab?.controller;
+  PdfDocument? get _document => _activeTab?.document;
+  int get _currentPage => _activeTab?.currentPage ?? 1;
+  int get _totalPages => _activeTab?.totalPages ?? 0;
+  double get _zoomRatio => _activeTab?.zoomRatio ?? 1.0;
+
+  late bool _isSidebarVisible;
   bool _isLoading = false;
 
   final ScrollController _thumbnailScrollController = ScrollController();
 
+  bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+  String get _modKey => Platform.isMacOS ? '⌘' : 'Ctrl';
+
   @override
   void initState() {
     super.initState();
-    _pdfController = PdfViewerController();
-    _pdfController!.addListener(_onControllerUpdate);
+    _isSidebarVisible = !_isMobile;
 
     if (widget.initialFilePath != null) {
       _checkAndOpenFile(widget.initialFilePath!);
@@ -123,27 +159,32 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
   @override
   void dispose() {
-    _pdfController?.removeListener(_onControllerUpdate);
     _thumbnailScrollController.dispose();
     super.dispose();
   }
 
-  void _onControllerUpdate() {
-    if (!mounted || _pdfController == null) return;
+  void _onTabControllerUpdate(PdfTab tab) {
+    if (!mounted) return;
 
-    final newZoom = _pdfController!.currentZoom;
-    if ((newZoom - _zoomRatio).abs() > 0.01) {
-      setState(() {
-        _zoomRatio = newZoom;
-      });
+    final newZoom = tab.controller.currentZoom;
+    final newPage = tab.controller.pageNumber;
+    bool needsState = false;
+
+    if ((newZoom - tab.zoomRatio).abs() > 0.005) {
+      tab.zoomRatio = newZoom;
+      needsState = true;
     }
 
-    final newPage = _pdfController!.pageNumber;
-    if (newPage != null && newPage != _currentPage) {
-      setState(() {
-        _currentPage = newPage;
-      });
-      _scrollToThumbnail(newPage);
+    if (newPage != null && newPage != tab.currentPage) {
+      tab.currentPage = newPage;
+      needsState = true;
+      if (tab == _activeTab) {
+        _scrollToThumbnail(newPage);
+      }
+    }
+
+    if (needsState && tab == _activeTab) {
+      setState(() {});
     }
   }
 
@@ -164,14 +205,18 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
   Future<void> _pickAndOpenFile() async {
     try {
       setState(() => _isLoading = true);
-      final file = await FilePicker.pickFile(
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        dialogTitle: 'Bir PDF Dosyası Seçin',
+        dialogTitle: 'Bir veya Birden Fazla PDF Dosyası Seçin',
       );
 
-      if (file != null && file.path != null) {
-        _checkAndOpenFile(file.path!);
+      if (files.isNotEmpty) {
+        for (final file in files) {
+          if (file.path != null) {
+            _checkAndOpenFile(file.path!);
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -255,37 +300,143 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
   }
 
   void _openFile(String path) {
+    final existingIndex = _tabs.indexWhere((t) => t.filePath == path);
+    if (existingIndex != -1) {
+      setState(() {
+        _activeTabIndex = existingIndex;
+      });
+      return;
+    }
+
+    final controller = PdfViewerController();
+    final tab = PdfTab(
+      id: '${DateTime.now().microsecondsSinceEpoch}_${path.hashCode}',
+      filePath: path,
+      fileName: _getFileName(path),
+      controller: controller,
+    );
+
+    controller.addListener(() => _onTabControllerUpdate(tab));
+
     setState(() {
-      _filePath = path;
-      _currentPage = 1;
-      _totalPages = 0;
-      _document = null;
-      _zoomRatio = 1.0;
+      _tabs.add(tab);
+      _activeTabIndex = _tabs.length - 1;
+    });
+  }
+
+  void _closeTab(int index) {
+    if (index < 0 || index >= _tabs.length) return;
+
+    setState(() {
+      _tabs.removeAt(index);
+      if (_tabs.isEmpty) {
+        _activeTabIndex = -1;
+      } else if (_activeTabIndex >= _tabs.length) {
+        _activeTabIndex = _tabs.length - 1;
+      } else if (_activeTabIndex > index) {
+        _activeTabIndex--;
+      }
     });
   }
 
   void _closeDocument() {
-    setState(() {
-      _filePath = null;
-      _document = null;
-      _currentPage = 1;
-      _totalPages = 0;
-      _zoomRatio = 1.0;
-    });
+    if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.length) {
+      _closeTab(_activeTabIndex);
+    }
   }
 
+  void _nextTab() {
+    if (_tabs.length > 1) {
+      setState(() {
+        _activeTabIndex = (_activeTabIndex + 1) % _tabs.length;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _activeTab != null) {
+          _scrollToThumbnail(_activeTab!.currentPage);
+        }
+      });
+    }
+  }
+
+  void _prevTab() {
+    if (_tabs.length > 1) {
+      setState(() {
+        _activeTabIndex = (_activeTabIndex - 1 + _tabs.length) % _tabs.length;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _activeTab != null) {
+          _scrollToThumbnail(_activeTab!.currentPage);
+        }
+      });
+    }
+  }
+
+  static const List<double> _zoomLevels = [
+    0.25, 0.35, 0.50, 0.65, 0.75, 0.85, 1.00, 1.15, 1.25, 1.50, 1.75, 2.00, 2.50, 3.00, 4.00, 5.00
+  ];
+
   void _zoomIn() {
-    _pdfController?.zoomUp();
+    final controller = _pdfController;
+    if (controller == null || !controller.isReady) return;
+    final current = controller.currentZoom;
+    double next = current * 1.2;
+    for (final level in _zoomLevels) {
+      if (level > current + 0.04) {
+        next = level;
+        break;
+      }
+    }
+    next = next.clamp(0.2, 5.0);
+    final center = controller.viewSize.center(Offset.zero);
+    controller.setZoom(center, next);
   }
 
   void _zoomOut() {
-    _pdfController?.zoomDown();
+    final controller = _pdfController;
+    if (controller == null || !controller.isReady) return;
+    final current = controller.currentZoom;
+    double prev = current / 1.2;
+    for (int i = _zoomLevels.length - 1; i >= 0; i--) {
+      if (_zoomLevels[i] < current - 0.04) {
+        prev = _zoomLevels[i];
+        break;
+      }
+    }
+    prev = prev.clamp(0.2, 5.0);
+    final center = controller.viewSize.center(Offset.zero);
+    controller.setZoom(center, prev);
+  }
+
+  void _fitWidth() {
+    final controller = _pdfController;
+    if (controller == null || !controller.isReady) return;
+    final matrix = controller.calcMatrixFitWidthForPage(pageNumber: _currentPage);
+    if (matrix != null) {
+      controller.value = matrix;
+      if (_activeTab != null) {
+        setState(() {
+          _activeTab!.zoomRatio = controller.currentZoom;
+        });
+      }
+    }
+  }
+
+  void _fitPage() {
+    final controller = _pdfController;
+    if (controller == null || !controller.isReady) return;
+    final matrix = controller.calcMatrixForFit(pageNumber: _currentPage);
+    if (matrix != null) {
+      controller.value = matrix;
+      if (_activeTab != null) {
+        setState(() {
+          _activeTab!.zoomRatio = controller.currentZoom;
+        });
+      }
+    }
   }
 
   void _resetZoom() {
-    if (_pdfController != null && _pdfController!.isReady) {
-      _pdfController!.goToPage(pageNumber: _currentPage);
-    }
+    _fitWidth();
   }
 
   void _goToPreviousPage() {
@@ -347,18 +498,186 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
     return path.split(Platform.pathSeparator).last;
   }
 
+  void _showThumbnailsBottomSheet(BuildContext context) {
+    if (_document == null || _totalPages == 0) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF181A1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.grid_view_rounded, size: 18),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Sayfalar',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF262930)
+                              : const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$_currentPage / $_totalPages',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: isDark
+                      ? const Color(0xFF2C2F36)
+                      : const Color(0xFFE5E7EB),
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 0.68,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: _totalPages,
+                    itemBuilder: (context, index) {
+                      final pageNumber = index + 1;
+                      final isSelected = pageNumber == _currentPage;
+
+                      return InkWell(
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _pdfController?.goToPage(pageNumber: pageNumber);
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : (isDark
+                                      ? const Color(0xFF2E323B)
+                                      : const Color(0xFFE2E8F0)),
+                              width: isSelected ? 2.5 : 1,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(8),
+                                  ),
+                                  child: Container(
+                                    color: Colors.white,
+                                    width: double.infinity,
+                                    child: PdfPageView(
+                                      document: _document,
+                                      pageNumber: pageNumber,
+                                      maximumDpi: 80,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.15)
+                                      : Colors.transparent,
+                                  borderRadius: const BorderRadius.vertical(
+                                    bottom: Radius.circular(8),
+                                  ),
+                                ),
+                                child: Text(
+                                  '$pageNumber',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark
-        ? const Color(0xFF1E2024)
-        : const Color(0xFFFFFFFF);
-    final borderColor = isDark
-        ? const Color(0xFF2C2F36)
-        : const Color(0xFFE5E7EB);
+    final surfaceColor =
+        isDark ? const Color(0xFF1E2024) : const Color(0xFFFFFFFF);
+    final borderColor =
+        isDark ? const Color(0xFF2C2F36) : const Color(0xFFE5E7EB);
 
     return CallbackShortcuts(
       bindings: {
+        // Ctrl shortcuts (Windows, Linux, Android)
         const SingleActivator(LogicalKeyboardKey.keyO, control: true):
             _pickAndOpenFile,
         const SingleActivator(LogicalKeyboardKey.equal, control: true):
@@ -367,35 +686,391 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             _zoomOut,
         const SingleActivator(LogicalKeyboardKey.digit0, control: true):
             _resetZoom,
+        const SingleActivator(LogicalKeyboardKey.keyW, control: true):
+            _closeDocument,
+        const SingleActivator(LogicalKeyboardKey.tab, control: true):
+            _nextTab,
+        const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
+            _prevTab,
         const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
-          setState(() => _isSidebarVisible = !_isSidebarVisible);
+          if (!_isMobile) {
+            setState(() => _isSidebarVisible = !_isSidebarVisible);
+          }
         },
+        // Cmd shortcuts (macOS)
+        const SingleActivator(LogicalKeyboardKey.keyO, meta: true):
+            _pickAndOpenFile,
+        const SingleActivator(LogicalKeyboardKey.equal, meta: true):
+            _zoomIn,
+        const SingleActivator(LogicalKeyboardKey.minus, meta: true):
+            _zoomOut,
+        const SingleActivator(LogicalKeyboardKey.digit0, meta: true):
+            _resetZoom,
+        const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
+            _closeDocument,
+        const SingleActivator(LogicalKeyboardKey.tab, meta: true):
+            _nextTab,
+        const SingleActivator(LogicalKeyboardKey.tab, meta: true, shift: true):
+            _prevTab,
+        const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () {
+          if (!_isMobile) {
+            setState(() => _isSidebarVisible = !_isSidebarVisible);
+          }
+        },
+        // Navigation shortcuts
         const SingleActivator(LogicalKeyboardKey.arrowLeft): _goToPreviousPage,
         const SingleActivator(LogicalKeyboardKey.arrowRight): _goToNextPage,
       },
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          appBar: _buildAppBar(isDark, surfaceColor, borderColor),
-          body: _filePath == null ? _buildEmptyView(isDark) : _buildPdfView(isDark),
+          appBar: _buildAppBar(context, isDark, surfaceColor, borderColor),
+          body: _tabs.isEmpty
+              ? _buildEmptyView(isDark)
+              : _buildPdfView(isDark),
         ),
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(
-      bool isDark, Color surfaceColor, Color borderColor) {
-    final fileName = _filePath != null ? _getFileName(_filePath!) : null;
+  PreferredSizeWidget _buildAppBar(BuildContext context, bool isDark,
+      Color surfaceColor, Color borderColor) {
+    final isCompact = _isMobile || MediaQuery.of(context).size.width < 720;
+    if (isCompact) {
+      return _buildMobileAppBar(context, isDark, surfaceColor, borderColor);
+    }
+    return _buildDesktopAppBar(context, isDark, surfaceColor, borderColor);
+  }
 
-    return AppBar(
-      toolbarHeight: 58,
-      backgroundColor: surfaceColor,
-      shape: Border(bottom: BorderSide(color: borderColor, width: 1)),
-      titleSpacing: 12,
-      title: Row(
+  Widget _buildTabItem(int index, PdfTab tab, bool isActive, bool isDark, Color borderColor) {
+    final activeBg = isDark ? const Color(0xFF23262D) : const Color(0xFFFFFFFF);
+    final inactiveBg = isDark ? const Color(0xFF16181C) : const Color(0xFFE9EEF4);
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _activeTabIndex = index;
+            });
+            final currentTab = _tabs[index];
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _scrollToThumbnail(currentTab.currentPage);
+              }
+            });
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 220, minWidth: 110),
+            padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+            decoration: BoxDecoration(
+              color: isActive ? activeBg : inactiveBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isActive ? primaryColor.withValues(alpha: 0.6) : borderColor,
+                width: isActive ? 1.4 : 1,
+              ),
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.picture_as_pdf_rounded,
+                  size: 16,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tab.fileName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                      color: isActive
+                          ? (isDark ? Colors.white : Colors.black87)
+                          : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                InkWell(
+                  onTap: () => _closeTab(index),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 14,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabBar(bool isDark, Color surfaceColor, Color borderColor) {
+    return Container(
+      height: 44,
+      color: isDark ? const Color(0xFF141619) : const Color(0xFFF1F5F9),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Row(
         children: [
-          // If no document is open, show Folio brand badge
-          if (_filePath == null) ...[
+          // Folio Branding
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  'assets/icons/folio_icon_128.png',
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Folio',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(height: 18, width: 1, color: borderColor),
+              const SizedBox(width: 8),
+            ],
+          ),
+
+          // Scrollable Tabs
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _tabs.length + 1,
+              itemBuilder: (context, index) {
+                if (index == _tabs.length) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: IconButton(
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      tooltip: 'Yeni Belge Aç ($_modKey + O)',
+                      onPressed: _isLoading ? null : _pickAndOpenFile,
+                      style: IconButton.styleFrom(
+                        padding: const EdgeInsets.all(8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                final tab = _tabs[index];
+                final isActive = index == _activeTabIndex;
+                return _buildTabItem(index, tab, isActive, isDark, borderColor);
+              },
+            ),
+          ),
+
+          // Actions on right
+          const SizedBox(width: 8),
+          Container(height: 18, width: 1, color: borderColor),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              size: 20,
+            ),
+            tooltip: isDark ? 'Açık Mod' : 'Karanlık Mod',
+            onPressed: widget.onToggleTheme,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopToolbar(bool isDark, Color surfaceColor, Color borderColor) {
+    final activeTab = _activeTab;
+    if (activeTab == null) return const SizedBox.shrink();
+
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        border: Border(bottom: BorderSide(color: borderColor)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        children: [
+          // Sidebar Toggle
+          IconButton(
+            icon: Icon(
+              _isSidebarVisible
+                  ? Icons.view_sidebar_rounded
+                  : Icons.view_sidebar_outlined,
+              color: _isSidebarVisible
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            tooltip: _isSidebarVisible
+                ? 'Sayfa Önizlemeyi Gizle ($_modKey+B)'
+                : 'Sayfa Önizlemeyi Göster ($_modKey+B)',
+            onPressed: () {
+              setState(() => _isSidebarVisible = !_isSidebarVisible);
+            },
+          ),
+          const SizedBox(width: 4),
+          Container(height: 18, width: 1, color: borderColor),
+          const SizedBox(width: 8),
+
+          // Page Navigation
+          if (_totalPages > 0) ...[
+            IconButton(
+              icon: const Icon(Icons.chevron_left_rounded, size: 20),
+              tooltip: 'Önceki Sayfa (Sol Ok)',
+              onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+            ),
+            InkWell(
+              onTap: _showPageJumpDialog,
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF262930) : const Color(0xFFF1F3F5),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Text(
+                  '$_currentPage / $_totalPages',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right_rounded, size: 20),
+              tooltip: 'Sonraki Sayfa (Sağ Ok)',
+              onPressed: _currentPage < _totalPages ? _goToNextPage : null,
+            ),
+            const SizedBox(width: 8),
+            Container(height: 18, width: 1, color: borderColor),
+            const SizedBox(width: 8),
+          ],
+
+          // Zoom Controls
+          IconButton(
+            icon: const Icon(Icons.remove_rounded, size: 18),
+            tooltip: 'Uzaklaştır ($_modKey + -)',
+            onPressed: _zoomOut,
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              '${(_zoomRatio * 100).round()}%',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_rounded, size: 18),
+            tooltip: 'Yakınlaştır ($_modKey + +)',
+            onPressed: _zoomIn,
+          ),
+          const SizedBox(width: 4),
+
+          // Fit Width
+          IconButton(
+            icon: const Icon(Icons.fit_screen_rounded, size: 18),
+            tooltip: 'Genişliğe Sığdır ($_modKey + 0)',
+            onPressed: _fitWidth,
+          ),
+
+          // Fit Page
+          IconButton(
+            icon: const Icon(Icons.fullscreen_rounded, size: 20),
+            tooltip: 'Sayfaya Sığdır',
+            onPressed: _fitPage,
+          ),
+
+          const Spacer(),
+
+          // Active Document Name tooltip
+          Tooltip(
+            message: activeTab.filePath,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.picture_as_pdf_rounded, size: 16, color: Colors.redAccent),
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  child: Text(
+                    activeTab.fileName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 10),
+          Container(height: 18, width: 1, color: borderColor),
+          const SizedBox(width: 6),
+
+          // Close active tab
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18),
+            tooltip: 'Aktif Belgeyi Kapat ($_modKey + W)',
+            onPressed: _closeDocument,
+          ),
+        ],
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildDesktopAppBar(
+    BuildContext context,
+    bool isDark,
+    Color surfaceColor,
+    Color borderColor,
+  ) {
+    if (_tabs.isEmpty) {
+      return AppBar(
+        toolbarHeight: 56,
+        backgroundColor: surfaceColor,
+        shape: Border(bottom: BorderSide(color: borderColor, width: 1)),
+        titleSpacing: 16,
+        title: Row(
+          children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: Image.asset(
@@ -409,38 +1084,14 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             const Text(
               'Folio',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.3,
               ),
             ),
-            const SizedBox(width: 14),
-            Container(height: 18, width: 1, color: borderColor),
-            const SizedBox(width: 12),
           ],
-
-          // Sidebar Toggle Button
-          if (_filePath != null) ...[
-            IconButton(
-              icon: Icon(
-                _isSidebarVisible
-                    ? Icons.view_sidebar_rounded
-                    : Icons.view_sidebar_outlined,
-                color: _isSidebarVisible
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-              ),
-              tooltip: _isSidebarVisible
-                  ? 'Sayfa Önizlemeyi Gizle (Ctrl+B)'
-                  : 'Sayfa Önizlemeyi Göster (Ctrl+B)',
-              onPressed: () {
-                setState(() => _isSidebarVisible = !_isSidebarVisible);
-              },
-            ),
-            const SizedBox(width: 4),
-          ],
-
-          // "Dosya Aç" Button
+        ),
+        actions: [
           FilledButton.tonalIcon(
             onPressed: _isLoading ? null : _pickAndOpenFile,
             icon: const Icon(Icons.file_open_rounded, size: 18),
@@ -452,138 +1103,257 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
               ),
             ),
           ),
-
-          if (fileName != null) ...[
-            const SizedBox(width: 12),
-            Container(height: 20, width: 1, color: borderColor),
-            const SizedBox(width: 12),
-            // File Name & Path Tooltip
-            Expanded(
-              child: Tooltip(
-                message: _filePath!,
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      size: 20,
-                      color: Colors.redAccent,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        fileName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ] else
-            const Spacer(),
-
-          // Page Number Indicator
-          if (_filePath != null && _totalPages > 0) ...[
-            Container(height: 20, width: 1, color: borderColor),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.chevron_left_rounded),
-              tooltip: 'Önceki Sayfa (Sol Ok)',
-              onPressed: _currentPage > 1 ? _goToPreviousPage : null,
-            ),
-            InkWell(
-              onTap: _showPageJumpDialog,
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF262930)
-                      : const Color(0xFFF1F3F5),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Text(
-                  '$_currentPage / $_totalPages',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right_rounded),
-              tooltip: 'Sonraki Sayfa (Sağ Ok)',
-              onPressed:
-                  _currentPage < _totalPages ? _goToNextPage : null,
-            ),
-            const SizedBox(width: 8),
-          ],
-
-          // Zoom Controls
-          if (_filePath != null) ...[
-            Container(height: 20, width: 1, color: borderColor),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.remove_rounded, size: 20),
-              tooltip: 'Uzaklaştır (Ctrl + -)',
-              onPressed: _zoomOut,
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                '${(_zoomRatio * 100).round()}%',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.add_rounded, size: 20),
-              tooltip: 'Yakınlaştır (Ctrl + +)',
-              onPressed: _zoomIn,
-            ),
-            IconButton(
-              icon: const Icon(Icons.fit_screen_rounded, size: 20),
-              tooltip: 'Genişliğe Sığdır (Ctrl + 0)',
-              onPressed: _resetZoom,
-            ),
-            const SizedBox(width: 8),
-          ],
-
-          // Theme Toggle
-          Container(height: 20, width: 1, color: borderColor),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           IconButton(
             icon: Icon(
-              widget.isDarkMode
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
             ),
-            tooltip: widget.isDarkMode ? 'Açık Mod' : 'Karanlık Mod',
+            tooltip: isDark ? 'Açık Mod' : 'Karanlık Mod',
             onPressed: widget.onToggleTheme,
           ),
+          const SizedBox(width: 10),
+        ],
+      );
+    }
 
-          // Close File Button
-          if (_filePath != null) ...[
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              tooltip: 'Belgeyi Kapat',
-              onPressed: _closeDocument,
-            ),
-          ],
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(90),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildTabBar(isDark, surfaceColor, borderColor),
+          _buildDesktopToolbar(isDark, surfaceColor, borderColor),
         ],
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildMobileAppBar(
+    BuildContext context,
+    bool isDark,
+    Color surfaceColor,
+    Color borderColor,
+  ) {
+    if (_tabs.isEmpty) {
+      return AppBar(
+        toolbarHeight: 56,
+        backgroundColor: surfaceColor,
+        elevation: 0,
+        shape: Border(bottom: BorderSide(color: borderColor, width: 1)),
+        titleSpacing: 16,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.asset(
+                'assets/icons/folio_icon_128.png',
+                width: 24,
+                height: 24,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Folio',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            ),
+            tooltip: isDark ? 'Açık Mod' : 'Karanlık Mod',
+            onPressed: widget.onToggleTheme,
+          ),
+          const SizedBox(width: 6),
+        ],
+      );
+    }
+
+    final activeTab = _activeTab;
+    return AppBar(
+      toolbarHeight: 56,
+      backgroundColor: surfaceColor,
+      elevation: 0,
+      shape: Border(bottom: BorderSide(color: borderColor, width: 1)),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded),
+        tooltip: 'Belgeyi Kapat',
+        onPressed: _closeDocument,
+      ),
+      titleSpacing: 0,
+      title: Text(
+        activeTab?.fileName ?? '',
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+      bottom: _tabs.length > 1
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(36),
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _tabs.length,
+                  itemBuilder: (context, index) {
+                    final tab = _tabs[index];
+                    final isActive = index == _activeTabIndex;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text(
+                          tab.fileName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        selected: isActive,
+                        onSelected: (_) => setState(() => _activeTabIndex = index),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            )
+          : null,
+      actions: [
+        if (_totalPages > 0) ...[
+          InkWell(
+            onTap: _showPageJumpDialog,
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF262930) : const Color(0xFFF1F3F5),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: borderColor),
+              ),
+              child: Text(
+                '$_currentPage / $_totalPages',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          IconButton(
+            icon: const Icon(Icons.grid_view_rounded, size: 21),
+            tooltip: 'Sayfa Önizlemeleri',
+            onPressed: () => _showThumbnailsBottomSheet(context),
+          ),
+        ],
+        IconButton(
+          icon: Icon(
+            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            size: 21,
+          ),
+          tooltip: isDark ? 'Açık Mod' : 'Karanlık Mod',
+          onPressed: widget.onToggleTheme,
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert_rounded),
+          onSelected: (value) {
+            switch (value) {
+              case 'open':
+                _pickAndOpenFile();
+                break;
+              case 'zoom_in':
+                _zoomIn();
+                break;
+              case 'zoom_out':
+                _zoomOut();
+                break;
+              case 'fit_width':
+                _fitWidth();
+                break;
+              case 'fit_page':
+                _fitPage();
+                break;
+              case 'close':
+                _closeDocument();
+                break;
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'open',
+              child: Row(
+                children: [
+                  Icon(Icons.file_open_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Yeni Belge Aç'),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'zoom_in',
+              child: Row(
+                children: [
+                  Icon(Icons.zoom_in_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Yakınlaştır'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'zoom_out',
+              child: Row(
+                children: [
+                  Icon(Icons.zoom_out_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Uzaklaştır'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'fit_width',
+              child: Row(
+                children: [
+                  Icon(Icons.fit_screen_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Genişliğe Sığdır'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'fit_page',
+              child: Row(
+                children: [
+                  Icon(Icons.fullscreen_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Sayfaya Sığdır'),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'close',
+              child: Row(
+                children: [
+                  Icon(Icons.close_rounded, size: 18, color: Colors.redAccent),
+                  SizedBox(width: 10),
+                  Text('Belgeyi Kapat', style: TextStyle(color: Colors.redAccent)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -596,132 +1366,148 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
         : const Color(0xFFE2E8F0);
 
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Container(
-          margin: const EdgeInsets.all(24),
-          padding: const EdgeInsets.all(36),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor, width: 1.2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.05),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2563EB).withValues(alpha: isDark ? 0.35 : 0.2),
-                      blurRadius: 28,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.asset(
-                    'assets/icons/folio_icon_256.png',
-                    width: 92,
-                    height: 92,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 22),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Folio',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: const Text(
-                      'PDF',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF3B82F6),
-                        letterSpacing: 1.0,
-                      ),
-                    ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor, width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.05),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                'Minimalist, akıcı ve yüksek performanslı belge okuyucu.\nGörüntülemek için bir PDF belgesi seçin veya doğrudan açın.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 28),
-              FilledButton.icon(
-                onPressed: _pickAndOpenFile,
-                icon: const Icon(Icons.file_open_rounded, size: 20),
-                label: const Text(
-                  'PDF Dosyası Seç',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 16,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2563EB)
+                              .withValues(alpha: isDark ? 0.35 : 0.2),
+                          blurRadius: 28,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.asset(
+                        'assets/icons/folio_icon_256.png',
+                        width: 92,
+                        height: 92,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 22),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Folio',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF3B82F6)
+                                .withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: const Text(
+                          'PDF',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF3B82F6),
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 28),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF14161A)
-                      : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildShortcutHint('Ctrl + O', 'Dosya Aç', isDark),
-                    _buildShortcutHint('Ctrl + B', 'Önizleme', isDark),
-                    _buildShortcutHint('Ctrl + +/-', 'Yakınlaştır', isDark),
+                  const SizedBox(height: 10),
+                  Text(
+                    _isMobile
+                        ? 'Minimalist ve akıcı PDF okuyucu.\nGörüntülemek için bir PDF belgesi seçin.'
+                        : 'Minimalist, akıcı ve yüksek performanslı belge okuyucu.\nGörüntülemek için bir PDF belgesi seçin veya doğrudan açın.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color:
+                          isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  FilledButton.icon(
+                    onPressed: _pickAndOpenFile,
+                    icon: const Icon(Icons.file_open_rounded, size: 20),
+                    label: const Text(
+                      'PDF Dosyası Seç',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  if (!_isMobile) ...[
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF14161A)
+                            : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildShortcutHint('$_modKey + O', 'Dosya Aç', isDark),
+                          _buildShortcutHint('$_modKey + B', 'Önizleme', isDark),
+                          _buildShortcutHint(
+                              '$_modKey + +/-', 'Yakınlaştır', isDark),
+                        ],
+                      ),
+                    ),
                   ],
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -769,131 +1555,212 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
     return Row(
       children: [
-        // Collapsible Thumbnail Sidebar
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          width: _isSidebarVisible ? 220 : 0,
-          child: _isSidebarVisible
-              ? Container(
+        // Collapsible Thumbnail Sidebar (only embedded on desktop)
+        if (!_isMobile)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            width: _isSidebarVisible ? 220 : 0,
+            child: ClipRect(
+              child: OverflowBox(
+                minWidth: 220,
+                maxWidth: 220,
+                alignment: Alignment.topLeft,
+                child: Container(
+                  width: 220,
                   decoration: BoxDecoration(
                     color: sidebarBg,
                     border: Border(right: BorderSide(color: borderColor)),
                   ),
                   child: _buildThumbnailPanel(isDark, borderColor),
-                )
-              : const SizedBox.shrink(),
-        ),
+                ),
+              ),
+            ),
+          ),
 
-        // Main PDF Canvas
+        // Main PDF Canvas with Multi-Document Tabs
         Expanded(
           child: Container(
             color: isDark
                 ? const Color(0xFF0F1012)
                 : const Color(0xFFE5E7EB),
-            child: PdfViewer.file(
-              _filePath!,
-              controller: _pdfController,
-              params: PdfViewerParams(
-                backgroundColor: isDark
-                    ? const Color(0xFF0F1012)
-                    : const Color(0xFFE5E7EB),
-                pageDropShadow: BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-                margin: 16,
-                errorBannerBuilder: (context, error, stackTrace, documentRef) {
-                  return Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 460),
-                      margin: const EdgeInsets.all(24),
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E2024) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.redAccent.withValues(alpha: 0.3),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            color: Colors.redAccent,
-                            size: 52,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'PDF Açılamadı',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Bu dosya geçerli veya okunabilir bir PDF formatında değil (FPDF_ERR_FORMAT).\nLütfen geçerli bir PDF belgesi seçin.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark
-                                  ? Colors.grey.shade400
-                                  : Colors.grey.shade600,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              OutlinedButton(
-                                onPressed: _closeDocument,
-                                child: const Text('Kapat'),
-                              ),
-                              const SizedBox(width: 12),
-                              FilledButton.icon(
-                                onPressed: _pickAndOpenFile,
-                                icon: const Icon(Icons.file_open_rounded,
-                                    size: 18),
-                                label: const Text('Başka Dosya Seç'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                onViewerReady: (document, controller) {
-                  setState(() {
-                    _document = document;
-                    _totalPages = document.pages.length;
-                  });
-                },
-                onPageChanged: (pageNumber) {
-                  if (pageNumber != null && pageNumber != _currentPage) {
-                    setState(() {
-                      _currentPage = pageNumber;
-                    });
-                    _scrollToThumbnail(pageNumber);
-                  }
-                },
-              ),
+            child: IndexedStack(
+              index: _activeTabIndex >= 0 ? _activeTabIndex : 0,
+              children: _tabs
+                  .map((tab) => _buildPdfViewerForTab(tab, isDark))
+                  .toList(),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPdfViewerForTab(PdfTab tab, bool isDark) {
+    return PdfViewer.file(
+      tab.filePath,
+      key: ValueKey(tab.id),
+      controller: tab.controller,
+      params: PdfViewerParams(
+        backgroundColor: isDark
+            ? const Color(0xFF0F1012)
+            : const Color(0xFFE5E7EB),
+        pageDropShadow: BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.2),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+        margin: 16,
+        viewerOverlayBuilder: (context, size, handleLinkTap) => [
+          PdfViewerScrollThumb(
+            controller: tab.controller,
+            orientation: ScrollbarOrientation.right,
+            thumbSize: const Size(32, 48),
+            margin: 6,
+            thumbBuilder: (context, thumbSize, pageNumber, controller) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF2E333D).withValues(alpha: 0.92)
+                      : const Color(0xFF1E293B).withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    '${pageNumber ?? 1}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          PdfViewerScrollThumb(
+            controller: tab.controller,
+            orientation: ScrollbarOrientation.bottom,
+            thumbSize: const Size(48, 8),
+            margin: 4,
+            thumbBuilder: (context, thumbSize, pageNumber, controller) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF3B404D).withValues(alpha: 0.6)
+                      : const Color(0xFF64748B).withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              );
+            },
+          ),
+        ],
+        errorBannerBuilder: (context, error, stackTrace, documentRef) {
+          return Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 460),
+              margin: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2024) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.redAccent.withValues(alpha: 0.3),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.redAccent,
+                    size: 52,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'PDF Açılamadı',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Bu dosya geçerli veya okunabilir bir PDF formatında değil (FPDF_ERR_FORMAT).\nLütfen geçerli bir PDF belgesi seçin.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => _closeTab(_tabs.indexOf(tab)),
+                        child: const Text('Kapat'),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: _pickAndOpenFile,
+                        icon: const Icon(Icons.file_open_rounded, size: 18),
+                        label: const Text('Başka Dosya Seç'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        onViewerReady: (document, controller) {
+          tab.document = document;
+          tab.totalPages = document.pages.length;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !controller.isReady) return;
+            final matrix = controller.calcMatrixFitWidthForPage(pageNumber: tab.currentPage);
+            if (matrix != null) {
+              controller.value = matrix;
+            }
+            setState(() {
+              tab.zoomRatio = controller.currentZoom;
+            });
+          });
+        },
+        onPageChanged: (pageNumber) {
+          if (pageNumber != null && pageNumber != tab.currentPage) {
+            setState(() {
+              tab.currentPage = pageNumber;
+            });
+            if (tab == _activeTab) {
+              _scrollToThumbnail(pageNumber);
+            }
+          }
+        },
+      ),
     );
   }
 

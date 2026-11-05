@@ -4,7 +4,7 @@ import 'package:pdf_reader/main.dart';
 void main() {
   testWidgets('PdfReaderApp smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const PdfReaderApp());
-    expect(find.text('Modern PDF Okuyucu'), findsOneWidget);
+    expect(find.text('Folio'), findsWidgets);
     expect(find.text('PDF Dosyası Seç'), findsOneWidget);
   });
 }
