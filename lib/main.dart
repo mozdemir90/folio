@@ -160,8 +160,17 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
     }
   }
 
+  void _logDebug(String msg) {
+    try {
+      final f = File('/tmp/folio_debug.log');
+      f.writeAsStringSync('${DateTime.now()} [Dart]: $msg\n', mode: FileMode.append);
+    } catch (_) {}
+  }
+
   void _initOpenFileChannel() {
+    _logDebug('_initOpenFileChannel registered');
     _openFileChannel.setMethodCallHandler((call) async {
+      _logDebug('_openFileChannel method: ${call.method}, args: ${call.arguments}');
       if (call.method == 'onOpenFiles') {
         final args = call.arguments;
         if (args is List) {
@@ -181,7 +190,9 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
   Future<void> _checkInitialFilesFromChannel() async {
     try {
+      _logDebug('Calling getInitialFiles...');
       final result = await _openFileChannel.invokeMethod<dynamic>('getInitialFiles');
+      _logDebug('getInitialFiles returned: $result');
       if (result is List && result.isNotEmpty) {
         for (final item in result) {
           if (item != null && item.toString().trim().isNotEmpty) {
@@ -190,6 +201,7 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
         }
       }
     } catch (e) {
+      _logDebug('Initial files error: $e');
       debugPrint('Initial files error: $e');
     }
   }
@@ -284,6 +296,7 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       }
     }
     if (path.isEmpty) return;
+    _logDebug('_checkAndOpenFile called for: $path');
 
     try {
       final f = File(path);
