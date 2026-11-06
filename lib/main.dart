@@ -7,21 +7,29 @@ import 'package:pdfrx/pdfrx.dart';
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
 
-  String? initialFilePath;
-  if (args.isNotEmpty) {
-    final candidate = args.first.replaceAll('"', '').trim();
+  final List<String> initialFiles = [];
+  for (final arg in args) {
+    final candidate = arg.replaceAll('"', '').trim();
     if (candidate.isNotEmpty && File(candidate).existsSync()) {
-      initialFilePath = candidate;
+      initialFiles.add(candidate);
     }
   }
 
-  runApp(PdfReaderApp(initialFilePath: initialFilePath));
+  runApp(PdfReaderApp(
+    initialFilePath: initialFiles.isNotEmpty ? initialFiles.first : null,
+    initialFilePaths: initialFiles,
+  ));
 }
 
 class PdfReaderApp extends StatefulWidget {
   final String? initialFilePath;
+  final List<String>? initialFilePaths;
 
-  const PdfReaderApp({super.key, this.initialFilePath});
+  const PdfReaderApp({
+    super.key,
+    this.initialFilePath,
+    this.initialFilePaths,
+  });
 
   @override
   State<PdfReaderApp> createState() => _PdfReaderAppState();
@@ -82,6 +90,7 @@ class _PdfReaderAppState extends State<PdfReaderApp> {
       ),
       home: PdfViewerHomeScreen(
         initialFilePath: widget.initialFilePath,
+        initialFilePaths: widget.initialFilePaths,
         onToggleTheme: _toggleTheme,
       ),
     );
@@ -114,11 +123,13 @@ class PdfTab {
 
 class PdfViewerHomeScreen extends StatefulWidget {
   final String? initialFilePath;
+  final List<String>? initialFilePaths;
   final VoidCallback onToggleTheme;
 
   const PdfViewerHomeScreen({
     super.key,
     this.initialFilePath,
+    this.initialFilePaths,
     required this.onToggleTheme,
   });
 
@@ -160,14 +171,19 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
     _initOpenFileChannel();
 
-    if (widget.initialFilePath != null) {
+    if (widget.initialFilePaths != null && widget.initialFilePaths!.isNotEmpty) {
+      for (final p in widget.initialFilePaths!) {
+        _checkAndOpenFile(p);
+      }
+    } else if (widget.initialFilePath != null) {
       _checkAndOpenFile(widget.initialFilePath!);
     }
   }
 
   void _logDebug(String msg) {
     try {
-      final f = File('/tmp/folio_debug.log');
+      final logDir = Directory.systemTemp.path;
+      final f = File('$logDir/folio_debug.log');
       f.writeAsStringSync('${DateTime.now()} [Dart]: $msg\n', mode: FileMode.append);
     } catch (_) {}
   }
