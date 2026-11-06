@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Folio — Yasal Belgeler ve Gizlilik Politikası</title>
+  <link rel="icon" type="image/png" href="folio_icon_128.png">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #3b82f6;
+        --primary-hover: #60a5fa;
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --text: #f8fafc;
+        --text-muted: #94a3b8;
+        --border: #334155;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .logo-container img {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+    .top-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .lang-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+    .lang-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+    .nav-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      padding: 6px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    .tab-btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 10px 14px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      box-shadow: var(--shadow);
+    }
+    .doc-section { display: none; }
+    .doc-section.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    h2 { font-size: 1.4rem; margin: 28px 0 12px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    h2:first-of-type { margin-top: 10px; }
+    h3 { font-size: 1.15rem; margin: 20px 0 8px; }
+    p { margin-bottom: 14px; color: var(--text); }
+    ul, ol { margin-left: 24px; margin-bottom: 16px; }
+    li { margin-bottom: 6px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border-radius: 6px;
+      background: #e0f2fe;
+      color: #0369a1;
+      margin-bottom: 12px;
+    }
+    .callout {
+      background: rgba(37, 99, 235, 0.08);
+      border-left: 4px solid var(--primary);
+      padding: 14px 18px;
+      border-radius: 6px;
+      margin: 18px 0;
+      font-size: 0.95rem;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 14px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo-container">
+      <img src="folio_icon_128.png" alt="Folio Logo">
+      <div style="text-align: left;">
+        <h1>Folio</h1>
+        <p class="subtitle" id="tagline">Modern & Güvenli PDF Okuyucu</p>
+      </div>
+    </div>
+    
+    <div class="top-actions">
+      <button class="lang-btn active" onclick="setLanguage('tr')">🇹🇷 Türkçe</button>
+      <button class="lang-btn" onclick="setLanguage('en')">🇬🇧 English</button>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="showTab('privacy')" id="tab-privacy-btn">🔒 Gizlilik Politikası</button>
+      <button class="tab-btn" onclick="showTab('terms')" id="tab-terms-btn">📜 Kullanım Koşulları</button>
+      <button class="tab-btn" onclick="showTab('kvkk')" id="tab-kvkk-btn">⚖️ KVKK Aydınlatma</button>
+      <button class="tab-btn" onclick="showTab('licenses')" id="tab-lic-btn">📦 Açık Kaynak</button>
+    </div>
+  </header>
+
+  <main class="card">
+    
+    <!-- GİZLİLİK POLİTİKASI (TR) -->
+    <section id="privacy-tr" class="doc-section active">
+      <div class="badge">Google Play Store & KVKK Uyumlu</div>
+      <h2>Folio — Gizlilik Politikası</h2>
+      <p><strong>Son Güncelleme:</strong> 6 Kasım 2026</p>
+      
+      <div class="callout">
+        <strong>Özet:</strong> Folio, tamamen çevrimdışı (offline) ve cihazınızda yerel olarak çalışan bir PDF okuyucudur. Hiçbir kişisel bilginizi, dosyanızı veya kullanım verinizi toplamaz, kaydetmez ve harici sunuculara göndermez.
+      </div>
+
+      <h3>1. Veri Toplamama İlkesi</h3>
+      <p>Folio uygulamasını kullanırken adınız, e-posta adresiniz, konumunuz, IP adresiniz, reklam kimliğiniz veya benzeri hiçbir kişisel veri istenmez ve toplanmaz. Uygulama içerisinde hesap oluşturma veya giriş yapma zorunluluğu yoktur.</p>
+
+      <h3>2. Belgeler ve Dosya Erişimi</h3>
+      <p>Açtığınız tüm PDF belgeleri yalnızca kendi cihazınızın belleğinde (RAM) işlenir. Belgeleriniz hiçbir şekilde harici sunuculara yüklenmez. Uygulama, yalnızca sistem dosya seçicisi (Storage Access Framework) üzerinden açıkça seçtiğiniz dosyalara erişir.</p>
+
+      <h3>3. İzinler ve İnternet Erişimi</h3>
+      <p>Uygulama yalnızca yerel dosya seçmek için depolama erişimini kullanır. Çekirdek özellikler için internet bağlantısı gerekmez; uygulama arka planda veri transferi gerçekleştirmez.</p>
+
+      <h3>4. Üçüncü Taraf SDK ve Reklamlar</h3>
+      <p>Uygulamada herhangi bir reklam ağı (AdMob vb.), analiz kütüphanesi (Google Analytics, Firebase vb.) ya da kullanıcı takip modülü <strong>bulunmamaktadır</strong>.</p>
+
+      <h3>5. Çocukların Gizliliği</h3>
+      <p>Uygulama her yaş grubuna uygundur ve çocuklardan bilerek herhangi bir kişisel veri toplamaz.</p>
+
+      <h3>6. İletişim</h3>
+      <p>Sorularınız veya geri bildirimleriniz için <a href="mailto:support@example.com">destek e-postamız</a> veya <a href="https://github.com/mozdemir90/folio" target="_blank">GitHub Depomuz</a> üzerinden bize ulaşabilirsiniz.</p>
+    </section>
+
+    <!-- PRIVACY POLICY (EN) -->
+    <section id="privacy-en" class="doc-section">
+      <div class="badge">Google Play & GDPR Compliant</div>
+      <h2>Folio — Privacy Policy</h2>
+      <p><strong>Last Updated:</strong> November 6, 2026</p>
+      
+      <div class="callout">
+        <strong>Summary:</strong> Folio is a strictly offline, local-first PDF document reader. We do not collect, store, transmit, or monetize any of your personal data or document contents.
+      </div>
+
+      <h3>1. Zero Data Collection</h3>
+      <p>Folio does not require user registration or accounts. We do not collect your name, email, IP address, device identifiers, or location data.</p>
+
+      <h3>2. Document Access & Local Processing</h3>
+      <p>PDF documents opened in Folio are rendered locally in your device's memory. Documents are never uploaded to any remote server or third party. The application accesses files solely via standard system file picker interfaces upon your explicit action.</p>
+
+      <h3>3. Permissions & Network</h3>
+      <p>Storage access is used exclusively to allow you to select and view PDF files. The application does not require internet access for reading documents and performs no background network requests.</p>
+
+      <h3>4. Third-Party Tracking & Ads</h3>
+      <p>The application contains <strong>no ads</strong>, <strong>no tracking SDKs</strong>, and <strong>no telemetry/analytics libraries</strong>.</p>
+
+      <h3>5. Children's Privacy</h3>
+      <p>Folio is safe for general audiences of all ages and does not knowingly collect personal data from children.</p>
+
+      <h3>6. Contact</h3>
+      <p>For questions regarding this policy, contact us via email or visit our <a href="https://github.com/mozdemir90/folio" target="_blank">GitHub repository</a>.</p>
+    </section>
+
+    <!-- KULLANIM KOŞULLARI (TR) -->
+    <section id="terms-tr" class="doc-section">
+      <h2>Kullanıcı Hizmet Sözleşmesi ve Kullanım Koşulları</h2>
+      <p><strong>Yürürlük Tarihi:</strong> 6 Kasım 2026</p>
+      <p>Folio uygulamasını indirerek veya kullanarak bu sözleşmenin şartlarını kabul etmiş sayılırsınız.</p>
+
+      <h3>1. Lisans ve Kullanım</h3>
+      <p>Geliştirici, kullanıcılara Folio uygulamasını kişisel ve meşru amaçlarla kullanmaları için münhasır olmayan, devredilemez ve geri alınabilir bir lisans tanır.</p>
+
+      <h3>2. İçerik ve Belge Sorumluluğu</h3>
+      <p>Uygulamada açılan veya okunan tüm PDF belgelerinin telif hakları, yasallığı ve içeriği tamamen kullanıcıya aittir. Geliştirici, kullanıcıların açtığı belgelerin içeriğine erişemez ve bu belgelerden doğabilecek hukuki sorumlulukları kabul etmez.</p>
+
+      <h3>3. Garanti Reddi ("Olduğu Gibi" / "AS IS")</h3>
+      <p>Uygulama "olduğu gibi" sunulmaktadır. Geliştirici, uygulamanın kesintisiz veya hatasız çalışacağını, tüm bozuk PDF dosyalarını kusursuz işleyeceğini garanti etmez.</p>
+
+      <h3>4. Sorumluluğun Sınırlandırılması</h3>
+      <p>Geliştirici, uygulamanın kullanımından veya kullanılamamasından doğan veri kaybı, iş kaybı veya donanım hasarlarından sorumlu tutulamaz.</p>
+    </section>
+
+    <!-- TERMS OF SERVICE (EN) -->
+    <section id="terms-en" class="doc-section">
+      <h2>Terms of Service</h2>
+      <p><strong>Effective Date:</strong> November 6, 2026</p>
+      <p>By downloading or using Folio, you agree to be bound by these Terms of Service.</p>
+
+      <h3>1. License Grant</h3>
+      <p>You are granted a personal, revocable, non-exclusive, non-transferable license to use Folio for legitimate document viewing purposes.</p>
+
+      <h3>2. User Document Ownership</h3>
+      <p>You retain full ownership of documents opened with Folio. You are solely responsible for the copyright compliance and legality of documents loaded into the application.</p>
+
+      <h3>3. "AS IS" Warranty Disclaimer</h3>
+      <p>Folio is provided "AS IS" without warranties of any kind. We do not warrant that the application will be uninterrupted, error-free, or compatible with all corrupted or non-standard PDF formats.</p>
+    </section>
+
+    <!-- KVKK AYDINLATMA METNİ -->
+    <section id="kvkk-tr" class="doc-section">
+      <h2>6698 Sayılı KVKK Uyarınca Aydınlatma Metni</h2>
+      <p><strong>Yürürlük Tarihi:</strong> 6 Kasım 2026</p>
+      
+      <h3>1. Veri Sorumlusu</h3>
+      <p>Folio uygulaması bünyesinde veri sorumlusu geliştiricidir. İletişim: <a href="mailto:support@example.com">support@example.com</a></p>
+
+      <h3>2. Kişisel Verilerin İşlenmemesi</h3>
+      <p>Folio çevrimdışı çalışan bir uygulamadır. Sunucularımıza aktarılan herhangi bir kişisel veri bulunmamaktadır. Açılan PDF belgeleri yalnızca cihazınızın yerel geçici hafızasında (RAM) görüntüleme amacıyla işlenir.</p>
+
+      <h3>3. Haklarınız</h3>
+      <p>6698 sayılı Kanun’un 11. maddesi kapsamındaki haklarınızı kullanmak üzere dilediğiniz zaman geliştiriciye başvurabilirsiniz.</p>
+    </section>
+
+    <!-- AÇIK KAYNAK LİSANSLARI -->
+    <section id="licenses-section" class="doc-section">
+      <h2>Açık Kaynak Lisansları ve Bildirimler</h2>
+      <p>Folio, aşağıdaki açık kaynak kütüphanelerini minnetle kullanmaktadır:</p>
+      
+      <h3>Flutter Framework</h3>
+      <p>Copyright 2014 The Flutter Authors. BSD 3-Clause License.</p>
+      
+      <h3>pdfrx & PDFium</h3>
+      <p>Copyright (c) 2024 Tomona Nanase. MIT License / Apache 2.0 / BSD.</p>
+
+      <h3>file_picker</h3>
+      <p>Copyright (c) 2018 Miguel Ruivo. MIT License.</p>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Folio — Modern PDF Reader. Tüm hakları saklıdır.</p>
+    <p><a href="https://github.com/mozdemir90/folio" target="_blank">GitHub Repository</a> | <a href="privacy.html">Doğrudan Gizlilik Politikası</a></p>
+  </footer>
+</div>
+
+<script>
+  let currentLang = 'tr';
+  let currentTab = 'privacy';
+
+  function setLanguage(lang) {
+    currentLang = lang;
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    if (lang === 'en') {
+      document.getElementById('tagline').textContent = 'Modern & Secure Local PDF Reader';
+      document.getElementById('tab-privacy-btn').textContent = '🔒 Privacy Policy';
+      document.getElementById('tab-terms-btn').textContent = '📜 Terms of Service';
+      document.getElementById('tab-lic-btn').textContent = '📦 Open Source';
+    } else {
+      document.getElementById('tagline').textContent = 'Modern & Güvenli PDF Okuyucu';
+      document.getElementById('tab-privacy-btn').textContent = '🔒 Gizlilik Politikası';
+      document.getElementById('tab-terms-btn').textContent = '📜 Kullanım Koşulları';
+      document.getElementById('tab-lic-btn').textContent = '📦 Açık Kaynak';
+    }
+    updateDisplay();
+  }
+
+  function showTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    updateDisplay();
+  }
+
+  function updateDisplay() {
+    document.querySelectorAll('.doc-section').forEach(sec => sec.classList.remove('active'));
+
+    if (currentTab === 'privacy') {
+      document.getElementById(`privacy-${currentLang}`).classList.add('active');
+    } else if (currentTab === 'terms') {
+      document.getElementById(`terms-${currentLang}`).classList.add('active');
+    } else if (currentTab === 'kvkk') {
+      document.getElementById('kvkk-tr').classList.add('active');
+    } else if (currentTab === 'licenses') {
+      document.getElementById('licenses-section').classList.add('active');
+    }
+  }
+
+  // URL Hash desteği (#terms, #privacy, #kvkk)
+  window.addEventListener('load', () => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash === 'terms' || hash === 'kvkk' || hash === 'licenses') {
+      currentTab = hash;
+      const btn = document.getElementById(`tab-${hash}-btn`);
+      if (btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+      updateDisplay();
+    }
+  });
+</script>
+
+</body>
+</html>

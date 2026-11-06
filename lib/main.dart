@@ -93,6 +93,7 @@ class PdfTab {
   String filePath;
   String fileName;
   final PdfViewerController controller;
+  PdfTextSearcher? textSearcher;
   PdfDocument? document;
   int currentPage;
   int totalPages;
@@ -103,6 +104,7 @@ class PdfTab {
     required this.filePath,
     required this.fileName,
     required this.controller,
+    this.textSearcher,
     this.document,
     this.currentPage = 1,
     this.totalPages = 0,
@@ -141,6 +143,9 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
   late bool _isSidebarVisible;
   bool _isLoading = false;
+  bool _isSearchVisible = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
 
   final ScrollController _thumbnailScrollController = ScrollController();
   static const MethodChannel _openFileChannel = MethodChannel('folio/open_file');
@@ -208,6 +213,11 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
   @override
   void dispose() {
+    for (final tab in _tabs) {
+      tab.textSearcher?.dispose();
+    }
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     _thumbnailScrollController.dispose();
     super.dispose();
   }
@@ -267,7 +277,8 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
           }
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
+      _logDebug('Error in _pickAndOpenFile: $e\n$stack');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -389,6 +400,8 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
   void _closeTab(int index) {
     if (index < 0 || index >= _tabs.length) return;
+    final tab = _tabs[index];
+    tab.textSearcher?.dispose();
 
     setState(() {
       _tabs.removeAt(index);
@@ -496,6 +509,48 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
         });
       }
     }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+      if (_isSearchVisible) {
+        _searchFocusNode.requestFocus();
+        final query = _searchController.text.trim();
+        if (query.isNotEmpty) {
+          _activeTab?.textSearcher?.startTextSearch(query);
+        }
+      } else {
+        _activeTab?.textSearcher?.resetTextSearch();
+      }
+    });
+  }
+
+  void _closeSearch() {
+    if (!_isSearchVisible) return;
+    setState(() {
+      _isSearchVisible = false;
+      _activeTab?.textSearcher?.resetTextSearch();
+    });
+  }
+
+  void _onSearchChanged(String query) {
+    final searcher = _activeTab?.textSearcher;
+    if (searcher == null) return;
+    final q = query.trim();
+    if (q.isEmpty) {
+      searcher.resetTextSearch();
+    } else {
+      searcher.startTextSearch(q);
+    }
+  }
+
+  void _searchNext() {
+    _activeTab?.textSearcher?.goToNextMatch();
+  }
+
+  void _searchPrev() {
+    _activeTab?.textSearcher?.goToPrevMatch();
   }
 
   void _resetZoom() {
@@ -1020,6 +1075,8 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             _resetZoom,
         const SingleActivator(LogicalKeyboardKey.keyW, control: true):
             _closeDocument,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _toggleSearch,
         const SingleActivator(LogicalKeyboardKey.tab, control: true):
             _nextTab,
         const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
@@ -1040,6 +1097,8 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             _resetZoom,
         const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
             _closeDocument,
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
+            _toggleSearch,
         const SingleActivator(LogicalKeyboardKey.tab, meta: true):
             _nextTab,
         const SingleActivator(LogicalKeyboardKey.tab, meta: true, shift: true):
@@ -1052,6 +1111,7 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
         // Navigation shortcuts
         const SingleActivator(LogicalKeyboardKey.arrowLeft): _goToPreviousPage,
         const SingleActivator(LogicalKeyboardKey.arrowRight): _goToNextPage,
+        const SingleActivator(LogicalKeyboardKey.escape): _closeSearch,
       },
       child: Focus(
         autofocus: true,
@@ -1347,6 +1407,12 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             icon: const Icon(Icons.fullscreen_rounded, size: 20),
             tooltip: 'Sayfaya Sığdır',
             onPressed: _fitPage,
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.search_rounded, size: 19),
+            tooltip: 'Belgede Ara ($_modKey + F)',
+            onPressed: _toggleSearch,
           ),
 
           const Spacer(),
@@ -1648,6 +1714,11 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             onPressed: () => _showThumbnailsBottomSheet(context),
           ),
         ],
+        IconButton(
+          icon: const Icon(Icons.search_rounded, size: 21),
+          tooltip: 'Belgede Ara',
+          onPressed: _toggleSearch,
+        ),
         IconButton(
           icon: const Icon(Icons.share_rounded, size: 21),
           tooltip: 'Paylaş',
@@ -2043,19 +2114,140 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
         // Main PDF Canvas with Multi-Document Tabs
         Expanded(
-          child: Container(
-            color: isDark
-                ? const Color(0xFF0F1012)
-                : const Color(0xFFE5E7EB),
-            child: IndexedStack(
-              index: _activeTabIndex >= 0 ? _activeTabIndex : 0,
-              children: _tabs
-                  .map((tab) => _buildPdfViewerForTab(tab, isDark))
-                  .toList(),
-            ),
+          child: Stack(
+            children: [
+              Container(
+                color: isDark
+                    ? const Color(0xFF0F1012)
+                    : const Color(0xFFE5E7EB),
+                child: IndexedStack(
+                  index: _activeTabIndex >= 0 ? _activeTabIndex : 0,
+                  children: _tabs
+                      .map((tab) => _buildPdfViewerForTab(tab, isDark))
+                      .toList(),
+                ),
+              ),
+              if (_isSearchVisible)
+                Positioned(
+                  top: 12,
+                  right: _isMobile ? 12 : 24,
+                  left: _isMobile ? 12 : null,
+                  child: _buildSearchBar(isDark, borderColor),
+                ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSearchBar(bool isDark, Color borderColor) {
+    final searcher = _activeTab?.textSearcher;
+    final matchCount = searcher?.matches.length ?? 0;
+    final currentIndex = searcher?.currentIndex;
+    final isSearching = searcher?.isSearching ?? false;
+
+    String matchText = '';
+    if (_searchController.text.trim().isNotEmpty) {
+      if (isSearching) {
+        matchText = 'Aranıyor...';
+      } else if (matchCount == 0) {
+        matchText = '0 sonuç';
+      } else {
+        matchText = '${(currentIndex ?? 0) + 1} / $matchCount';
+      }
+    }
+
+    final cardBg = isDark ? const Color(0xFF1E2128) : Colors.white;
+
+    return Material(
+      elevation: 8,
+      shadowColor: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: _isMobile ? double.infinity : 380,
+          minWidth: 260,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_rounded, size: 20, color: Colors.blueAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                autofocus: true,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(
+                  hintText: 'Belgede ara...',
+                  hintStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  border: InputBorder.none,
+                ),
+                onChanged: _onSearchChanged,
+                onSubmitted: (_) {
+                  if (HardwareKeyboard.instance.isShiftPressed) {
+                    _searchPrev();
+                  } else {
+                    _searchNext();
+                  }
+                },
+              ),
+            ),
+            if (matchText.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2C3038) : const Color(0xFFF1F3F5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  matchText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: matchCount > 0
+                        ? (isDark ? Colors.lightBlueAccent : Colors.blue.shade700)
+                        : Colors.grey,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 20),
+              tooltip: 'Önceki (Shift+Enter)',
+              onPressed: matchCount > 0 ? _searchPrev : null,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+              tooltip: 'Sonraki (Enter)',
+              onPressed: matchCount > 0 ? _searchNext : null,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18),
+              tooltip: 'Kapat (Esc)',
+              onPressed: _closeSearch,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2065,6 +2257,11 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       key: ValueKey(tab.id),
       controller: tab.controller,
       params: PdfViewerParams(
+        pagePaintCallbacks: [
+          (canvas, pageRect, page) {
+            tab.textSearcher?.pageTextMatchPaintCallback(canvas, pageRect, page);
+          },
+        ],
         backgroundColor: isDark
             ? const Color(0xFF0F1012)
             : const Color(0xFFE5E7EB),
@@ -2202,6 +2399,17 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
         onViewerReady: (document, controller) {
           tab.document = document;
           tab.totalPages = document.pages.length;
+          if (tab.textSearcher == null) {
+            tab.textSearcher = PdfTextSearcher(controller);
+            tab.textSearcher!.addListener(() {
+              if (mounted && _activeTab == tab) {
+                setState(() {});
+              }
+            });
+            if (_isSearchVisible && _searchController.text.trim().isNotEmpty) {
+              tab.textSearcher!.startTextSearch(_searchController.text.trim());
+            }
+          }
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted || !controller.isReady) return;
             final matrix = controller.calcMatrixFitWidthForPage(pageNumber: tab.currentPage);
