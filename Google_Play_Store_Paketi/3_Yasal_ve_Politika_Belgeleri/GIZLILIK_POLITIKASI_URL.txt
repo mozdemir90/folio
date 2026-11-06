@@ -1,0 +1,5 @@
+GOOGLE PLAY CONSOLE - GİZLİLİK POLİTİKASI (PRIVACY POLICY) WEB BAĞLANTISI:
+
+https://mozdemir90.github.io/folio/privacy.html
+
+Bu bağlantıyı Google Play Console -> "Uygulama İçeriği" -> "Gizlilik Politikası" alanına doğrudan yapıştırabilirsiniz.

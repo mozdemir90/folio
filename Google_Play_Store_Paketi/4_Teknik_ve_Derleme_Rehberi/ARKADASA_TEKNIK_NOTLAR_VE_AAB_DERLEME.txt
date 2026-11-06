@@ -1,0 +1,32 @@
+====================================================================
+GELİŞTİRİCİ / ARKADAŞINIZ İÇİN TEKNİK VE DERLEME REHBERİ
+====================================================================
+
+1. PAKET BİLGİSİ:
+- Application ID (Package Name): com.folio.pdfreader
+- Namespace: com.folio.pdfreader
+- Android SDK Versiyonları: compileSdk 34+, minSdk 21+, targetSdk 34+
+
+2. GITHUB DEPOSU:
+https://github.com/mozdemir90/folio.git
+(Tüm kodlar, ikonlar ve yapılandırmalar main dalında günceldir).
+
+3. ANDROID APP BUNDLE (.AAB) DERLEME ADIMLARI:
+Terminalde proje dizinine girip sırasıyla şu komutları çalıştırmanız yeterlidir:
+
+   # Bağımlılıkları güncelleyin
+   flutter pub get
+
+   # Google Play Store için release bundle (.aab) üretin
+   flutter build appbundle --release
+
+4. ÜRETİLEN DOSYANIN KONUMU:
+Derleme tamamlandığında Play Console'a yüklenecek olan .aab dosyası tam olarak şu konumda oluşur:
+build/app/outputs/bundle/release/app-release.aab
+
+5. İMZALAMA (SIGNING) NOTU:
+Google Play Store'da uygulamanın kabul edilmesi için paketin bir Release Keystore ile imzalanması gerekir.
+Eğer kendi Play Console hesabınıza ilk kez yüklüyorsanız:
+- Google Play App Signing otomatik olarak etkinleşir.
+- Android Studio üzerinden "Generate Signed Bundle" diyerek yeni bir .jks anahtarı oluşturabilir veya key.properties üzerinden flutter build appbundle çalıştırabilirsiniz.
+====================================================================

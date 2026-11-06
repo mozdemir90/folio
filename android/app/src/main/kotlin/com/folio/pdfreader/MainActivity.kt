@@ -1,4 +1,4 @@
-package com.example.pdf_reader
+package com.folio.pdfreader
 
 import android.content.Intent
 import android.net.Uri

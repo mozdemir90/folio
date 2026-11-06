@@ -1,0 +1,42 @@
+====================================================================
+GOOGLE PLAY STORE - MAĞAZA GİRİŞ BİLGİLERİ (FOLIO)
+====================================================================
+
+1. UYGULAMA ADI (Title - Maksimum 30 Karakter):
+Folio: Modern PDF Okuyucu
+
+--------------------------------------------------------------------
+2. KISA AÇIKLAMA (Short Description - Maksimum 80 Karakter):
+Hızlı, minimalist ve güçlü PDF okuyucu. Sekmeli ve belgede arama destekli.
+
+--------------------------------------------------------------------
+3. TAM AÇIKLAMA (Full Description - Maksimum 4000 Karakter):
+Folio, belgelerinizi en hızlı, en sade ve en zarif şekilde okumanız için tasarlanmış modern bir PDF görüntüleyicidir.
+
+Karmaşık ve yavaş PDF araçlarını unutun. Folio; tüy kadar hafif mimarisi, akıcı sayfa işleme motoru ve kullanıcı dostu arayüzü ile PDF deneyimini yeniden tanımlıyor.
+
+ÖNE ÇIKAN ÖZELLİKLER:
+
+⚡ Işık Hızında Performans:
+Gelişmiş pdfrx motoru sayesinde yüzlerce sayfalık büyük PDF belgelerini bile saniyeler içinde takılmadan açar ve işler.
+
+📑 Çoklu Sekme (Multi-Tab) Desteği:
+Aynı anda birden fazla PDF belgesini sekmeler halinde açabilir, belgeler arasında tek dokunuşla kaybolmadan geçiş yapabilirsiniz.
+
+🔍 Akıllı Belge İçi Arama:
+Belgelerinizdeki kelime veya cümleleri anında bulun. Eşleşen sözcükler sayfada renkli olarak vurgulanır, sonuçlar arasında hızla gezinebilirsiniz.
+
+🖼️ Sayfa Önizleme Kenar Çubuğu:
+Sol taraftaki küçük resim (thumbnail) paneli ile istediğiniz sayfayı anında önizleyin ve tek dokunuşla doğrudan o sayfaya atlayın.
+
+🔎 Kademeli ve Akıcı Yakınlaştırma (Smooth Zoom):
+Yazıları kristal netliğinde okumak için optimize edilmiş akıcı yakınlaştırma adımları ve sayfaya otomatik sığdırma modları.
+
+🎨 Modern Açık ve Koyu Tema:
+Göz sağlığınızı korumak için tasarlanmış OLED dostu koyu tema ve saf beyaz açık tema desteği.
+
+🛡️ %100 Gizlilik ve Çevrimdışı Çalışma:
+Folio hiçbir kişisel verinizi toplamaz, harici sunuculara dosya yüklemez ve internet bağlantısına ihtiyaç duymaz. Belgeleriniz yalnızca sizin cihazınızda kalır.
+
+Belgelerinizi zahmetsizce okumak ve yönetmek için Folio'yu hemen keşfedin!
+====================================================================
