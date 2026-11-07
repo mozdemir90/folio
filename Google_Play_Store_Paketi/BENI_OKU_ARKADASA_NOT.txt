@@ -1,0 +1,47 @@
+================================================================================
+FOLIO - GOOGLE PLAY STORE YAYINLAMA PAKETİ
+================================================================================
+Merhaba,
+Folio (Modern & Hızlı PDF Okuyucu) uygulamasının Google Play Store'da sorunsuz ve
+hızlıca yayınlanabilmesi için gereken tüm teknik dosyalar, görseller, metinler ve
+yasal belgeler bu pakette eksiksiz toplanmıştır.
+
+KLASÖR DÜZENİ VE İÇERİK REHBERİ:
+--------------------------------------------------------------------------------
+📁 0_AAB_ve_Imzalama_Dosyalari/
+   ├── app-release.aab             -> Google Play Console'a yüklenecek ana bundle (60 MB).
+   ├── upload-keystore.jks         -> Uygulamanın resmi imzalama anahtarı (Gelecek sürümler için saklayın!).
+   └── IMZALAMA_VE_SURUM_BILGILERI.txt -> Keystore şifreleri, alias ve parmak izleri.
+
+📁 1_Magaza_Gorselleri/
+   ├── app_icon_512x512.png        -> 512x512 piksel resmi mağaza uygulama ikonu.
+   ├── feature_graphic_1024x500.png-> 1024x500 piksel Play Store öne çıkan grafik banner'ı.
+   ├── screenshot_1_ana_ekran.png  -> Telefon ekran görüntüsü 1 (Ana Ekran & Kitaplık).
+   ├── screenshot_2_belge_gorunumu.png -> Telefon ekran görüntüsü 2 (Okuma Modu & Akıcı Kaydırma).
+   ├── screenshot_3_coklu_sekme.png    -> Telefon ekran görüntüsü 3 (Çoklu Belge & Hızlı Geçiş).
+   └── screenshot_4_metin_arama.png    -> Telefon ekran görüntüsü 4 (Akıllı Arama & Vurgulama).
+
+📁 2_Magaza_Metinleri/
+   └── magaza_bilgileri.txt        -> Google Play Console form alanları için kopyala-yapıştır metinler:
+                                      - Uygulama Adı (Folio - Hızlı PDF Okuyucu)
+                                      - Kısa Açıklama (Tam 80 karakter sınırına uygun)
+                                      - Tam Açıklama (Özellikler, gizlilik ve formatlı açıklama)
+
+📁 3_Yasal_ve_Politika_Belgeleri/
+   ├── GIZLILIK_POLITIKASI_URL.txt -> Play Console'a girilecek canlı Gizlilik Politikası web linki:
+                                      (https://mozdemir90.github.io/folio/privacy.html)
+   ├── GIZLILIK_POLITIKASI.md      -> Gizlilik politikasının tam metni.
+   └── GOOGLE_PLAY_VERI_GUVENLIGI_REHBERI.md -> Play Console "Veri Güvenliği" anketinde
+                                                işaretlenecek adımlar (Veri toplamaz, reklam içermez).
+
+📁 4_Teknik_ve_Derleme_Rehberi/
+   └── TEKNIK_NOTLAR_VE_AAB_DERLEME.md -> Uygulamanın mimarisi, paket kimliği ve geliştirici notları.
+
+--------------------------------------------------------------------------------
+HIZLI YAYINLAMA ADIMLARI (5 DAKİKA):
+1. https://play.google.com/console adresinde oturum açıp "Uygulama Oluştur" deyin.
+2. "0_AAB_ve_Imzalama_Dosyalari/app-release.aab" dosyasını "Sürümler" sekmesine yükleyin.
+3. "Ana Mağaza Girişi" sekmesinde "1_Magaza_Gorselleri" ve "2_Magaza_Metinleri" içeriğini doldurun.
+4. "Uygulama İçeriği" sekmesinde Gizlilik Politikası URL'sini girin ve Veri Güvenliği anketini kılavuza göre onaylayın.
+5. İncelemeye gönderin!
+================================================================================

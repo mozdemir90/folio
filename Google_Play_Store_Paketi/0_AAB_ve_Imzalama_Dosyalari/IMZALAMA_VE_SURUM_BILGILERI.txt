@@ -1,0 +1,43 @@
+=============================================================
+FOLIO - ANDROID RELEASE (AAB) VE İMZALAMA BİLGİLERİ
+=============================================================
+
+1. UYGULAMA VE SÜRÜM BİLGİLERİ
+-------------------------------------------------------------
+* Uygulama Adı        : Folio
+* Paket Kimliği (ID)   : com.folio.pdfreader
+* Sürüm Adı (Version)  : 1.0.0
+* Sürüm Kodu (Code)    : 1
+* Hedef Android SDK    : Android 14+ (API 34/35/36 uyumlu)
+* Minimum Android SDK  : Android 5.0 (API 21+)
+* Üretilen Dosya       : app-release.aab (Google Play için hazır)
+
+2. İMZALAMA ANAHTARI (UPLOAD KEYSTORE) BİLGİLERİ
+-------------------------------------------------------------
+Bu dosya Google Play Console'a yükleme yaparken kullanılan resmi "Upload Keystore"dur.
+Google Play App Signing sistemi bu anahtarı ilk yüklemede tanıyıp eşleştirecektir.
+Gelecekteki tüm Folio güncellemeleri bu anahtarla imzalanmalıdır!
+
+* Keystore Dosyası     : upload-keystore.jks
+* Key Alias (Takma Ad) : upload
+* Keystore Şifresi     : folio2026keystore
+* Key Şifresi          : folio2026keystore
+* Algoritma / Boyut    : RSA 2048-bit (PKCS12 standardı)
+* Geçerlilik Tarihi    : 2054 yılına kadar geçerli
+
+3. SERTİFİKA PARMAK İZLERİ (FINGERPRINTS)
+-------------------------------------------------------------
+* SHA-256 : 83:2D:01:FF:27:BF:39:D4:B8:A6:45:28:E0:0E:C6:3F:AC:09:AD:54:3B:9C:8D:9E:4F:C6:7E:42:5F:32:5F:7E
+* SHA-1   : 95:92:30:EB:DB:7E:99:B2:05:D9:7F:37:31:92:03:13:82:2C:DF:CC
+
+4. GOOGLE PLAY CONSOLE YÜKLEME ADIMI
+-------------------------------------------------------------
+1. Google Play Console'a giriş yapın (https://play.google.com/console).
+2. "Uygulama oluştur" (Create App) deyin:
+   - Ad: Folio
+   - Dil: Türkçe (veya İngilizce)
+   - Tür: Uygulama / Ücretsiz
+3. "Sürüm oluştur" (Create Release) ekranına gidin.
+4. "Uygulama paketleri" bölümüne 'app-release.aab' dosyasını sürükleyip bırakın.
+5. Google Play otomatik olarak analiz edip paketi kabul edecektir.
+=============================================================

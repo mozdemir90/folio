@@ -1,5 +1,10 @@
 # Miscellaneous
 *.apk
+*.aab
+*.7z
+*.jks
+*.keystore
+/android/key.properties
 *.class
 *.log
 *.pyc
