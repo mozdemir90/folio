@@ -5,6 +5,7 @@
 *.jks
 *.keystore
 /android/key.properties
+derleme_ve_dagitim_dosyalari/
 *.class
 *.log
 *.pyc

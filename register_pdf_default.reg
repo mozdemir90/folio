@@ -1,13 +1,13 @@
 Windows Registry Editor Version 5.00
 
 ; ====================================================================
-; Lumina PDF Reader - Windows File Association & Default App Registry
+; Folio PDF Reader - Windows File Association & Default App Registry
 ; ====================================================================
 
 ; 1. Application Registration
 [HKEY_CURRENT_USER\Software\Classes\Applications\pdf_reader.exe]
-"FriendlyAppName"="Lumina PDF Reader"
-@="Lumina PDF Reader"
+"FriendlyAppName"="Folio PDF Reader"
+@="Folio PDF Reader"
 
 [HKEY_CURRENT_USER\Software\Classes\Applications\pdf_reader.exe\DefaultIcon]
 @="\"C:\\Users\\frt\\Desktop\\repos\\pdf reader\\build\\windows\\x64\\runner\\Release\\pdf_reader.exe\",0"
@@ -19,51 +19,51 @@ Windows Registry Editor Version 5.00
 @="open"
 
 [HKEY_CURRENT_USER\Software\Classes\Applications\pdf_reader.exe\shell\open]
-@="Lumina ile Aç"
-"FriendlyAppName"="Lumina PDF Reader"
+@="Folio ile Aç"
+"FriendlyAppName"="Folio PDF Reader"
 
 [HKEY_CURRENT_USER\Software\Classes\Applications\pdf_reader.exe\shell\open\command]
 @="\"C:\\Users\\frt\\Desktop\\repos\\pdf reader\\build\\windows\\x64\\runner\\Release\\pdf_reader.exe\" \"%1\""
 
 
-; 2. ProgID Registration (Lumina.PDF)
-[HKEY_CURRENT_USER\Software\Classes\Lumina.PDF]
-@="Lumina PDF Belgesi"
-"FriendlyTypeName"="Lumina PDF Belgesi"
+; 2. ProgID Registration (Folio.PDF)
+[HKEY_CURRENT_USER\Software\Classes\Folio.PDF]
+@="Folio PDF Belgesi"
+"FriendlyTypeName"="Folio PDF Belgesi"
 
-[HKEY_CURRENT_USER\Software\Classes\Lumina.PDF\DefaultIcon]
+[HKEY_CURRENT_USER\Software\Classes\Folio.PDF\DefaultIcon]
 @="\"C:\\Users\\frt\\Desktop\\repos\\pdf reader\\build\\windows\\x64\\runner\\Release\\pdf_reader.exe\",0"
 
-[HKEY_CURRENT_USER\Software\Classes\Lumina.PDF\shell]
+[HKEY_CURRENT_USER\Software\Classes\Folio.PDF\shell]
 @="open"
 
-[HKEY_CURRENT_USER\Software\Classes\Lumina.PDF\shell\open]
-@="Lumina ile Aç"
+[HKEY_CURRENT_USER\Software\Classes\Folio.PDF\shell\open]
+@="Folio ile Aç"
 
-[HKEY_CURRENT_USER\Software\Classes\Lumina.PDF\shell\open\command]
+[HKEY_CURRENT_USER\Software\Classes\Folio.PDF\shell\open\command]
 @="\"C:\\Users\\frt\\Desktop\\repos\\pdf reader\\build\\windows\\x64\\runner\\Release\\pdf_reader.exe\" \"%1\""
 
 
-; 3. Associate .pdf with Lumina ProgID
+; 3. Associate .pdf with Folio ProgID
 [HKEY_CURRENT_USER\Software\Classes\.pdf\OpenWithProgids]
-"Lumina.PDF"=""
+"Folio.PDF"=""
 
 
 ; 4. Windows 10/11 Registered Applications (Capabilities for Default Apps Settings)
 [HKEY_CURRENT_USER\Software\RegisteredApplications]
-"Lumina PDF Reader"="Software\\Lumina\\Capabilities"
+"Folio PDF Reader"="Software\\Folio\\Capabilities"
 
-[HKEY_CURRENT_USER\Software\Lumina\Capabilities]
-"ApplicationName"="Lumina PDF Reader"
-"ApplicationDescription"="Lumina - Modern, Hızlı ve Akıcı PDF Okuyucu"
+[HKEY_CURRENT_USER\Software\Folio\Capabilities]
+"ApplicationName"="Folio PDF Reader"
+"ApplicationDescription"="Folio - Modern, Hızlı ve Akıcı PDF Okuyucu"
 
-[HKEY_CURRENT_USER\Software\Lumina\Capabilities\FileAssociations]
-".pdf"="Lumina.PDF"
+[HKEY_CURRENT_USER\Software\Folio\Capabilities\FileAssociations]
+".pdf"="Folio.PDF"
 
 
 ; 5. Windows Explorer OpenWithList Entry
 [HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\OpenWithList]
-"Lumina"="pdf_reader.exe"
+"Folio"="pdf_reader.exe"
 
 [HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\OpenWithProgids]
-"Lumina.PDF"=hex(0):
+"Folio.PDF"=hex(0):
