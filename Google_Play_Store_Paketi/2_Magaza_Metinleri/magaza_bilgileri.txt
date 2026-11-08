@@ -1,48 +1,128 @@
 ====================================================================
-GOOGLE PLAY STORE - MAĞAZA GİRİŞ BİLGİLERİ (FOLIO)
+GOOGLE PLAY STORE - MAĞAZA GÖRSELİ BİLGİLERİ (FOLIO)
+Güncelleme: Kasım 2026 — v1.0.0
 ====================================================================
 
-1. UYGULAMA ADI (Title - Maksimum 30 Karakter):
+1. UYGULAMA ADI (Title — Maks. 30 karakter)
+--------------------------------------------------------------------
 Folio: Modern PDF Okuyucu
 
---------------------------------------------------------------------
-2. KISA AÇIKLAMA (Short Description - Maksimum 80 Karakter):
-Hızlı, akıcı ve minimalist PDF okuyucu. Sekmeli, çizimli ve arama destekli.
+(28 karakter ✓)
 
 --------------------------------------------------------------------
-3. TAM AÇIKLAMA (Full Description - Maksimum 4000 Karakter):
+2. KISA AÇIKLAMA (Short Description — Maks. 80 karakter)
+--------------------------------------------------------------------
+Hızlı, sade PDF okuyucu. Çizim, vurgulama, sekme ve arama desteği.
+
+(67 karakter ✓)
+
+--------------------------------------------------------------------
+3. TAM AÇIKLAMA (Full Description — Maks. 4000 karakter)
+--------------------------------------------------------------------
 Folio, belgelerinizi en hızlı, en sade ve en zarif şekilde okumanız için tasarlanmış modern bir PDF görüntüleyicidir.
 
 Karmaşık ve yavaş PDF araçlarını unutun. Folio; tüy kadar hafif mimarisi, akıcı sayfa işleme motoru ve kullanıcı dostu arayüzü ile PDF deneyimini yeniden tanımlıyor.
 
-ÖNE ÇIKAN ÖZELLİKLER:
+━━━ ÖNE ÇIKAN ÖZELLİKLER ━━━
 
-⚡ Işık Hızında Performans:
+⚡ Işık Hızında Performans
 Gelişmiş pdfrx motoru sayesinde yüzlerce sayfalık büyük PDF belgelerini bile saniyeler içinde takılmadan açar ve işler.
 
-📑 Çoklu Sekme (Multi-Tab) Desteği:
+🗂️ Çoklu Sekme (Multi-Tab) Desteği
 Aynı anda birden fazla PDF belgesini sekmeler halinde açabilir, belgeler arasında tek dokunuşla kaybolmadan geçiş yapabilirsiniz.
 
-🖊️ Kalem ve Vurgulayıcı (Highlighter) Notları:
+✏️ Kalem ve Vurgulayıcı (Highlighter) Notlar
 Belgeleriniz üzerine serbestçe çizimler yapabilir, önemli cümlelerin üzerini fosforlu kalemle vurgulayabilirsiniz. Renk, kalınlık ve geri alma (undo) desteğiyle tam kontrol sizde.
 
-📂 Son Açılan Belgeler (Akıllı Kitaplık):
+🕐 Son Açılan Belgeler (Akıllı Kitaplık)
 En son okuduğunuz dokümanları düzenli bir listede tutar, kaldığınız yerden tek dokunuşla anında devam etmenizi sağlar.
 
-🔍 Akıllı Belge İçi Arama:
-Belgelerinizdeki kelime veya cümleleri anında bulun. Eşleşen sözcükler sayfada renkli olarak vurgulanır, sonuçlar arasında hızla gezinebilirsiniz.
+🔍 Akıllı Belge İçi Arama
+Belgelerinizdeki kelime veya cümleleri anında bulun. Eşleyen sözcükler sayfada renkli olarak vurgulanır, sonuçlar arasında hızla gezinebilirsiniz.
 
-🖼️ Sayfa Önizleme Kenar Çubuğu:
+🖼️ Sayfa Önizleme Kenar Çubuğu
 Sol taraftaki küçük resim (thumbnail) paneli ile istediğiniz sayfayı anında önizleyin ve tek dokunuşla doğrudan o sayfaya atlayın.
 
-🔎 Kademeli ve Akıcı Yakınlaştırma (Smooth Zoom):
+🔎 Kademeli ve Akıcı Yakınlaştırma (Smooth Zoom)
 Yazıları kristal netliğinde okumak için optimize edilmiş akıcı yakınlaştırma adımları ve sayfaya otomatik sığdırma modları.
 
-🎨 Modern Açık ve Koyu Tema:
+🌙 Modern Açık ve Koyu Tema
 Göz sağlığınızı korumak için tasarlanmış OLED dostu koyu tema ve saf beyaz açık tema desteği.
 
-🛡️ %100 Gizlilik ve Çevrimdışı Çalışma:
+🔒 %100 Gizlilik ve Çevrimdışı Çalışma
 Folio hiçbir kişisel verinizi toplamaz, harici sunuculara dosya yüklemez ve internet bağlantısına ihtiyaç duymaz. Belgeleriniz yalnızca sizin cihazınızda kalır.
 
 Belgelerinizi zahmetsizce okumak ve yönetmek için Folio'yu hemen keşfedin!
+
+(Karakter sayısı: ~1750 ✓ — 4000 limitinin altında)
+
+--------------------------------------------------------------------
+4. DEĞİŞİKLİK NOTLARI — Sürüm 1.0.0 (What's New)
+--------------------------------------------------------------------
+🎉 Folio'nun ilk sürümüne hoş geldiniz!
+
+• Çoklu sekme ile aynı anda birden fazla PDF açın
+• Kalem ve vurgulayıcı ile belgelere not alın
+• Son açılan belgeler listesiyle kaldığınız yerden devam edin
+• Belge içi arama ile kelimeleri anında bulun
+• Akıcı yakınlaştırma ve sayfa önizleme
+• Açık / koyu tema desteği
+
+--------------------------------------------------------------------
+5. KATEGORİ
+--------------------------------------------------------------------
+Ana kategori: Üretkenlik
+Alt kategori: Araçlar
+
+--------------------------------------------------------------------
+6. İÇERİK DERECELENDİRMESİ
+--------------------------------------------------------------------
+Herkes (3+)
+Şiddet: Yok
+Cinsel içerik: Yok
+Uygunsuz dil: Yok
+
+--------------------------------------------------------------------
+7. GİZLİLİK POLİTİKASI URL
+--------------------------------------------------------------------
+https://mozdemir90.github.io/folio/privacy.html
+
+--------------------------------------------------------------------
+8. VERİ GÜVENLİĞİ (Data Safety) — Hepsi HAYIR
+--------------------------------------------------------------------
+• Veri topluyor musunuz? HAYIR
+• Üçüncü taraflarla paylaşıyor musunuz? HAYIR
+• Şifreleme: —
+• Silme isteği: —
+
+--------------------------------------------------------------------
+9. ETİKETLER (Tags — Maks. 5)
+--------------------------------------------------------------------
+pdf okuyucu, pdf viewer, belge okuyucu, pdf reader, folio
+
+--------------------------------------------------------------------
+10. UYGULAMA İLETİŞİM BİLGİLERİ
+--------------------------------------------------------------------
+E-posta: folio.pdfreader@gmail.com
+Web sitesi: https://github.com/mozdemir90/folio
+Gizlilik politikası: https://mozdemir90.github.io/folio/privacy.html
+
+====================================================================
+EKRAN GÖRÜNTÜLERİ — ÖNERİLEN İÇERİKLER
+====================================================================
+
+Ekran görüntüsü boyutu: minimum 320px, maksimum 3840px
+Tercih edilen boyut: 1080 x 1920 px (dikey)
+Format: PNG veya JPG
+Minimum 2, maksimum 8 ekran görüntüsü
+
+Önerilen 4 ekran görüntüsü içerikleri:
+1. Ana ekran — son açılan belgeler listesi
+2. PDF okuma ekranı — kalem/vurgulayıcı araç çubuğu açık
+3. Çoklu sekme görünümü — 2-3 PDF açık
+4. Arama sonuçları — vurgulanan kelimeler
+
+Feature Graphic: 1024 x 500 px (zorunlu)
+İçerik: Folio logosu + "Modern PDF Okuyucu" yazısı + koyu arka plan
+
 ====================================================================
