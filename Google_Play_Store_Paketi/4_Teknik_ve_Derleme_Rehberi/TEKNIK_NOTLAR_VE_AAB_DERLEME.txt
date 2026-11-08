@@ -5,28 +5,34 @@ GELİŞTİRİCİ / ARKADAŞINIZ İÇİN TEKNİK VE DERLEME REHBERİ
 1. PAKET BİLGİSİ:
 - Application ID (Package Name): com.folio.pdfreader
 - Namespace: com.folio.pdfreader
-- Android SDK Versiyonları: compileSdk 34+, minSdk 21+, targetSdk 34+
+- Version Name: 1.0.0
+- Version Code: 1
+- Android SDK Versiyonları: compileSdk 36, minSdk 21+, targetSdk 36
 
 2. GITHUB DEPOSU:
 https://github.com/mozdemir90/folio.git
-(Tüm kodlar, ikonlar ve yapılandırmalar main dalında günceldir).
+(Tüm kodlar, ikonlar, platform kanalları ve yapılandırmalar main dalında günceldir).
 
-3. ANDROID APP BUNDLE (.AAB) DERLEME ADIMLARI:
-Terminalde proje dizinine girip sırasıyla şu komutları çalıştırmanız yeterlidir:
+3. HAZIR RELEASE BUNDLE (DOĞRUDAN YÜKLENEBİLİR):
+Bu paket içerisinde "0_AAB_ve_Imzalama_Dosyalari/app-release.aab" dosyası
+resmi upload keystore ile imzalanmış ve Google Play Console'a yüklenmeye
+hazır halde bulunmaktadır. Tekrar derleme yapmanıza gerek yoktur.
+
+4. SIFIRDAN DERLEME ADIMLARI (İHTİYAÇ OLURSA):
+Terminalde proje dizinine girip sırasıyla şu komutları çalıştırabilirsiniz:
 
    # Bağımlılıkları güncelleyin
    flutter pub get
 
-   # Google Play Store için release bundle (.aab) üretin
+   # Google Play Store için imzalı release bundle (.aab) üretin
    flutter build appbundle --release
 
-4. ÜRETİLEN DOSYANIN KONUMU:
-Derleme tamamlandığında Play Console'a yüklenecek olan .aab dosyası tam olarak şu konumda oluşur:
-build/app/outputs/bundle/release/app-release.aab
+   # Çıktı konumu:
+   build/app/outputs/bundle/release/app-release.aab
 
-5. İMZALAMA (SIGNING) NOTU:
-Google Play Store'da uygulamanın kabul edilmesi için paketin bir Release Keystore ile imzalanması gerekir.
-Eğer kendi Play Console hesabınıza ilk kez yüklüyorsanız:
-- Google Play App Signing otomatik olarak etkinleşir.
-- Android Studio üzerinden "Generate Signed Bundle" diyerek yeni bir .jks anahtarı oluşturabilir veya key.properties üzerinden flutter build appbundle çalıştırabilirsiniz.
+5. İMZALAMA (UPLOAD KEYSTORE) BİLGİLERİ:
+- Keystore Dosyası: 0_AAB_ve_Imzalama_Dosyalari/upload-keystore.jks
+- Alias: upload
+- Şifreler: folio2026keystore
+- Tüm detaylar "0_AAB_ve_Imzalama_Dosyalari/IMZALAMA_VE_SURUM_BILGILERI.txt" dosyasındadır.
 ====================================================================

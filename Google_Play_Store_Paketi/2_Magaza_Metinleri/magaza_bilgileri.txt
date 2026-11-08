@@ -7,7 +7,7 @@ Folio: Modern PDF Okuyucu
 
 --------------------------------------------------------------------
 2. KISA AÇIKLAMA (Short Description - Maksimum 80 Karakter):
-Hızlı, minimalist ve güçlü PDF okuyucu. Sekmeli ve belgede arama destekli.
+Hızlı, akıcı ve minimalist PDF okuyucu. Sekmeli, çizimli ve arama destekli.
 
 --------------------------------------------------------------------
 3. TAM AÇIKLAMA (Full Description - Maksimum 4000 Karakter):
@@ -22,6 +22,12 @@ Gelişmiş pdfrx motoru sayesinde yüzlerce sayfalık büyük PDF belgelerini bi
 
 📑 Çoklu Sekme (Multi-Tab) Desteği:
 Aynı anda birden fazla PDF belgesini sekmeler halinde açabilir, belgeler arasında tek dokunuşla kaybolmadan geçiş yapabilirsiniz.
+
+🖊️ Kalem ve Vurgulayıcı (Highlighter) Notları:
+Belgeleriniz üzerine serbestçe çizimler yapabilir, önemli cümlelerin üzerini fosforlu kalemle vurgulayabilirsiniz. Renk, kalınlık ve geri alma (undo) desteğiyle tam kontrol sizde.
+
+📂 Son Açılan Belgeler (Akıllı Kitaplık):
+En son okuduğunuz dokümanları düzenli bir listede tutar, kaldığınız yerden tek dokunuşla anında devam etmenizi sağlar.
 
 🔍 Akıllı Belge İçi Arama:
 Belgelerinizdeki kelime veya cümleleri anında bulun. Eşleşen sözcükler sayfada renkli olarak vurgulanır, sonuçlar arasında hızla gezinebilirsiniz.
