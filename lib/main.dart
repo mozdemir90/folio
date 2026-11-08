@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'annotations.dart';
+import 'recent_documents.dart';
+import 'recent_documents_view.dart';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +111,8 @@ class PdfTab {
   int currentPage;
   int totalPages;
   double zoomRatio;
+  Map<int, List<DrawingStroke>> annotations;
+  List<Map<String, dynamic>> undoHistory;
 
   PdfTab({
     required this.id,
@@ -118,7 +124,10 @@ class PdfTab {
     this.currentPage = 1,
     this.totalPages = 0,
     this.zoomRatio = 1.0,
-  });
+    Map<int, List<DrawingStroke>>? annotations,
+    List<Map<String, dynamic>>? undoHistory,
+  })  : annotations = annotations ?? {},
+        undoHistory = undoHistory ?? [];
 }
 
 class PdfViewerHomeScreen extends StatefulWidget {
@@ -164,12 +173,20 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
   String get _modKey => Platform.isMacOS ? '⌘' : 'Ctrl';
 
+  List<RecentDocument> _recentDocuments = [];
+  AnnotationTool _activeAnnotationTool = AnnotationTool.none;
+  Color _selectedPenColor = const Color(0xFF2563EB);
+  Color _selectedHighlighterColor = const Color(0xFFFACC15);
+  double _penWidth = 3.0;
+  double _highlighterWidth = 24.0;
+
   @override
   void initState() {
     super.initState();
     _isSidebarVisible = !_isMobile;
 
     _initOpenFileChannel();
+    _loadRecentDocuments();
 
     if (widget.initialFilePaths != null && widget.initialFilePaths!.isNotEmpty) {
       for (final p in widget.initialFilePaths!) {
@@ -177,6 +194,15 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       }
     } else if (widget.initialFilePath != null) {
       _checkAndOpenFile(widget.initialFilePath!);
+    }
+  }
+
+  Future<void> _loadRecentDocuments() async {
+    final docs = await RecentDocumentsService.getRecentDocuments();
+    if (mounted) {
+      setState(() {
+        _recentDocuments = docs;
+      });
     }
   }
 
@@ -412,6 +438,18 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       _tabs.add(tab);
       _activeTabIndex = _tabs.length - 1;
     });
+
+    RecentDocumentsService.addDocument(path).then((_) {
+      if (mounted) _loadRecentDocuments();
+    });
+
+    AnnotationStorageService.loadAnnotations(path).then((saved) {
+      if (saved.isNotEmpty && mounted) {
+        setState(() {
+          tab.annotations = saved;
+        });
+      }
+    });
   }
 
   void _closeTab(int index) {
@@ -423,12 +461,129 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       _tabs.removeAt(index);
       if (_tabs.isEmpty) {
         _activeTabIndex = -1;
+        _activeAnnotationTool = AnnotationTool.none;
       } else if (_activeTabIndex >= _tabs.length) {
         _activeTabIndex = _tabs.length - 1;
       } else if (_activeTabIndex > index) {
         _activeTabIndex--;
       }
     });
+
+    if (_tabs.isEmpty) {
+      _loadRecentDocuments();
+    }
+  }
+
+  void _onStrokeAdded(PdfTab tab, int pageNumber, DrawingStroke stroke) {
+    setState(() {
+      tab.annotations.putIfAbsent(pageNumber, () => []).add(stroke);
+      tab.undoHistory.add({
+        'type': 'add',
+        'page': pageNumber,
+        'stroke': stroke,
+      });
+    });
+    AnnotationStorageService.saveAnnotations(tab.filePath, tab.annotations);
+  }
+
+  void _onEraseAtPoint(
+      PdfTab tab, int pageNumber, Offset localPoint, Size pageSize) {
+    final strokes = tab.annotations[pageNumber];
+    if (strokes == null || strokes.isEmpty) return;
+
+    final toRemove = <DrawingStroke>[];
+    for (final stroke in strokes) {
+      for (final pt in stroke.points) {
+        final screenX = pt.x * pageSize.width;
+        final screenY = pt.y * pageSize.height;
+        final dist = math.sqrt(math.pow(screenX - localPoint.dx, 2) +
+            math.pow(screenY - localPoint.dy, 2));
+        if (dist < 20.0) {
+          toRemove.add(stroke);
+          break;
+        }
+      }
+    }
+
+    if (toRemove.isNotEmpty) {
+      setState(() {
+        for (final s in toRemove) {
+          strokes.remove(s);
+          tab.undoHistory.add({
+            'type': 'remove',
+            'page': pageNumber,
+            'stroke': s,
+          });
+        }
+      });
+      AnnotationStorageService.saveAnnotations(tab.filePath, tab.annotations);
+    }
+  }
+
+  void _undoAnnotation(PdfTab tab) {
+    if (tab.undoHistory.isEmpty) return;
+    final lastAction = tab.undoHistory.removeLast();
+    final page = lastAction['page'] as int;
+    final stroke = lastAction['stroke'] as DrawingStroke;
+    final type = lastAction['type'] as String;
+
+    setState(() {
+      if (type == 'add') {
+        tab.annotations[page]?.removeWhere((s) => s.id == stroke.id);
+      } else if (type == 'remove') {
+        tab.annotations.putIfAbsent(page, () => []).add(stroke);
+      }
+    });
+    AnnotationStorageService.saveAnnotations(tab.filePath, tab.annotations);
+  }
+
+  void _clearPageAnnotations(PdfTab tab, int pageNumber) {
+    final pageStrokes = tab.annotations[pageNumber];
+    if (pageStrokes == null || pageStrokes.isEmpty) return;
+
+    setState(() {
+      for (final s in pageStrokes) {
+        tab.undoHistory.add({
+          'type': 'remove',
+          'page': pageNumber,
+          'stroke': s,
+        });
+      }
+      tab.annotations.remove(pageNumber);
+    });
+    AnnotationStorageService.saveAnnotations(tab.filePath, tab.annotations);
+  }
+
+  void _confirmClearPageAnnotations(PdfTab tab, int pageNumber) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Çizimleri Temizle'),
+          ],
+        ),
+        content: Text(
+          'Sayfa $pageNumber üzerindeki tüm kalem ve vurgulayıcı çizimlerini silmek istiyor musunuz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _clearPageAnnotations(tab, pageNumber);
+            },
+            child: const Text('Temizle'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _closeDocument() {
@@ -1070,6 +1225,223 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
     );
   }
 
+  void _showMobileAnnotationBottomSheet(
+      BuildContext context, PdfTab? activeTab) {
+    if (activeTab == null) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final highlighterColors = [
+      const Color(0xFFFACC15),
+      const Color(0xFF4ADE80),
+      const Color(0xFF60A5FA),
+      const Color(0xFFF472B6),
+      const Color(0xFFFB923C),
+    ];
+
+    final penColors = [
+      const Color(0xFF2563EB),
+      const Color(0xFFDC2626),
+      const Color(0xFF1E293B),
+      const Color(0xFF16A34A),
+      const Color(0xFF9333EA),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF181A1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isHighlighter =
+                _activeAnnotationTool == AnnotationTool.highlighter;
+            final isPen = _activeAnnotationTool == AnnotationTool.pen;
+            final isEraser = _activeAnnotationTool == AnnotationTool.eraser;
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.grey.shade700
+                              : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Icon(Icons.edit_note_rounded,
+                            size: 22, color: Color(0xFF3B82F6)),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Vurgulayıcı & Kalem Araçları',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        if (activeTab.undoHistory.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.undo_rounded),
+                            tooltip: 'Geri Al',
+                            onPressed: () {
+                              _undoAnnotation(activeTab);
+                              setModalState(() {});
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Gezinme')),
+                            selected:
+                                _activeAnnotationTool == AnnotationTool.none,
+                            avatar: const Icon(Icons.near_me_rounded, size: 16),
+                            onSelected: (_) {
+                              setState(() =>
+                                  _activeAnnotationTool = AnnotationTool.none);
+                              setModalState(() {});
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Vurgula')),
+                            selected: isHighlighter,
+                            avatar:
+                                const Icon(Icons.border_color_rounded, size: 16),
+                            onSelected: (_) {
+                              setState(() => _activeAnnotationTool =
+                                  AnnotationTool.highlighter);
+                              setModalState(() {});
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Kalem')),
+                            selected: isPen,
+                            avatar: const Icon(Icons.edit_rounded, size: 16),
+                            onSelected: (_) {
+                              setState(() =>
+                                  _activeAnnotationTool = AnnotationTool.pen);
+                              setModalState(() {});
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Silgi')),
+                            selected: isEraser,
+                            avatar: const Icon(Icons.auto_fix_normal_rounded,
+                                size: 16),
+                            onSelected: (_) {
+                              setState(() => _activeAnnotationTool =
+                                  AnnotationTool.eraser);
+                              setModalState(() {});
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (isHighlighter || isPen) ...[
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Renk Seçin:',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: (isHighlighter ? highlighterColors : penColors)
+                            .map((color) {
+                          final isSelected = isHighlighter
+                              ? _selectedHighlighterColor.toARGB32() ==
+                                  color.toARGB32()
+                              : _selectedPenColor.toARGB32() == color.toARGB32();
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (isHighlighter) {
+                                  _selectedHighlighterColor = color;
+                                } else {
+                                  _selectedPenColor = color;
+                                }
+                              });
+                              setModalState(() {});
+                            },
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? (isDark ? Colors.white : Colors.black)
+                                      : (isDark
+                                          ? Colors.white24
+                                          : Colors.black12),
+                                  width: isSelected ? 3 : 1,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        if (activeTab.annotations.containsKey(_currentPage) &&
+                            (activeTab.annotations[_currentPage]?.isNotEmpty ??
+                                false))
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _confirmClearPageAnnotations(
+                                  activeTab, _currentPage);
+                            },
+                            icon: const Icon(Icons.delete_sweep_rounded,
+                                color: Colors.redAccent, size: 18),
+                            label: const Text('Bu Sayfayı Temizle',
+                                style: TextStyle(color: Colors.redAccent)),
+                          ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Tamam'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1131,11 +1503,24 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
-          appBar: _buildAppBar(context, isDark, surfaceColor, borderColor),
-          body: _tabs.isEmpty
-              ? _buildEmptyView(isDark)
-              : _buildPdfView(isDark),
+        child: PopScope(
+          canPop: _tabs.isEmpty && _activeAnnotationTool == AnnotationTool.none,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            if (_activeAnnotationTool != AnnotationTool.none) {
+              setState(() => _activeAnnotationTool = AnnotationTool.none);
+              return;
+            }
+            if (_tabs.isNotEmpty) {
+              _closeDocument();
+            }
+          },
+          child: Scaffold(
+            appBar: _buildAppBar(context, isDark, surfaceColor, borderColor),
+            body: _tabs.isEmpty
+                ? _buildEmptyView(isDark)
+                : _buildPdfView(isDark),
+          ),
         ),
       ),
     );
@@ -1431,6 +1816,11 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
             onPressed: _toggleSearch,
           ),
 
+          const SizedBox(width: 4),
+          Container(height: 18, width: 1, color: borderColor),
+          const SizedBox(width: 6),
+          _buildDesktopAnnotationTools(isDark, borderColor),
+
           const Spacer(),
 
           // Active Document Name tooltip
@@ -1528,6 +1918,227 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDesktopAnnotationTools(bool isDark, Color borderColor) {
+    final activeTab = _activeTab;
+    if (activeTab == null) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
+    Widget buildToolBtn({
+      required IconData icon,
+      required String tooltip,
+      required bool isSelected,
+      required VoidCallback onTap,
+      Color? activeColor,
+    }) {
+      final color = activeColor ?? primaryColor;
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: isDark ? 0.25 : 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected
+              ? Border.all(
+                  color: color.withValues(alpha: 0.6),
+                  width: 1.2,
+                )
+              : null,
+        ),
+        child: IconButton(
+          icon: Icon(
+            icon,
+            size: 18,
+            color: isSelected
+                ? color
+                : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+          ),
+          tooltip: tooltip,
+          onPressed: onTap,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.all(6),
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+      );
+    }
+
+    final isHighlighter = _activeAnnotationTool == AnnotationTool.highlighter;
+    final isPen = _activeAnnotationTool == AnnotationTool.pen;
+    final isEraser = _activeAnnotationTool == AnnotationTool.eraser;
+
+    final highlighterColors = [
+      const Color(0xFFFACC15), // Neon Yellow
+      const Color(0xFF4ADE80), // Pastel Green
+      const Color(0xFF60A5FA), // Soft Blue
+      const Color(0xFFF472B6), // Bright Pink
+      const Color(0xFFFB923C), // Orange
+    ];
+
+    final penColors = [
+      const Color(0xFF2563EB), // Blue
+      const Color(0xFFDC2626), // Red
+      const Color(0xFF1E293B), // Dark Slate / Black
+      const Color(0xFF16A34A), // Green
+      const Color(0xFF9333EA), // Purple
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Navigation / Browse tool
+        buildToolBtn(
+          icon: Icons.near_me_rounded,
+          tooltip: 'Gezinme / Seçim Modu',
+          isSelected: _activeAnnotationTool == AnnotationTool.none,
+          onTap: () => setState(() => _activeAnnotationTool = AnnotationTool.none),
+        ),
+        // Highlighter tool
+        buildToolBtn(
+          icon: Icons.border_color_rounded,
+          tooltip: 'Vurgulayıcı Kalem',
+          isSelected: isHighlighter,
+          activeColor: const Color(0xFFEAB308),
+          onTap: () {
+            setState(() {
+              _activeAnnotationTool = isHighlighter
+                  ? AnnotationTool.none
+                  : AnnotationTool.highlighter;
+            });
+          },
+        ),
+        // Pen tool
+        buildToolBtn(
+          icon: Icons.edit_rounded,
+          tooltip: 'Kalemle Not Al / Çiz',
+          isSelected: isPen,
+          activeColor: const Color(0xFF2563EB),
+          onTap: () {
+            setState(() {
+              _activeAnnotationTool =
+                  isPen ? AnnotationTool.none : AnnotationTool.pen;
+            });
+          },
+        ),
+        // Eraser tool
+        buildToolBtn(
+          icon: Icons.auto_fix_normal_rounded,
+          tooltip: 'Silgi (Çizime dokunarak sil)',
+          isSelected: isEraser,
+          activeColor: Colors.deepOrangeAccent,
+          onTap: () {
+            setState(() {
+              _activeAnnotationTool =
+                  isEraser ? AnnotationTool.none : AnnotationTool.eraser;
+            });
+          },
+        ),
+
+        // Color picker chips when Highlighter or Pen is active
+        if (isHighlighter || isPen) ...[
+          const SizedBox(width: 4),
+          Container(height: 16, width: 1, color: borderColor),
+          const SizedBox(width: 6),
+          ...((isHighlighter ? highlighterColors : penColors).map((color) {
+            final isColorSelected = isHighlighter
+                ? _selectedHighlighterColor.toARGB32() == color.toARGB32()
+                : _selectedPenColor.toARGB32() == color.toARGB32();
+            return InkWell(
+              onTap: () {
+                setState(() {
+                  if (isHighlighter) {
+                    _selectedHighlighterColor = color;
+                  } else {
+                    _selectedPenColor = color;
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: 16,
+                height: 16,
+                margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isColorSelected
+                        ? (isDark ? Colors.white : Colors.black)
+                        : (isDark ? Colors.white24 : Colors.black12),
+                    width: isColorSelected ? 2.2 : 1,
+                  ),
+                ),
+              ),
+            );
+          })),
+          const SizedBox(width: 4),
+          // Stroke Width selection
+          PopupMenuButton<double>(
+            tooltip: 'Kalem Kalınlığı',
+            icon: const Icon(Icons.line_weight_rounded, size: 17),
+            padding: EdgeInsets.zero,
+            splashRadius: 16,
+            itemBuilder: (context) => isHighlighter
+                ? [
+                    const PopupMenuItem(
+                        value: 16.0, child: Text('İnce Vurgu (16px)')),
+                    const PopupMenuItem(
+                        value: 24.0, child: Text('Normal Vurgu (24px)')),
+                    const PopupMenuItem(
+                        value: 36.0, child: Text('Geniş Vurgu (36px)')),
+                  ]
+                : [
+                    const PopupMenuItem(
+                        value: 1.5, child: Text('İnce Kalem (1.5px)')),
+                    const PopupMenuItem(
+                        value: 3.0, child: Text('Normal Kalem (3px)')),
+                    const PopupMenuItem(
+                        value: 5.5, child: Text('Kalın Kalem (5.5px)')),
+                  ],
+            onSelected: (width) {
+              setState(() {
+                if (isHighlighter) {
+                  _highlighterWidth = width;
+                } else {
+                  _penWidth = width;
+                }
+              });
+            },
+          ),
+        ],
+
+        // Undo button
+        if (activeTab.undoHistory.isNotEmpty) ...[
+          const SizedBox(width: 2),
+          IconButton(
+            icon: const Icon(Icons.undo_rounded, size: 17),
+            tooltip: 'Son Çizimi Geri Al',
+            onPressed: () => _undoAnnotation(activeTab),
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+        ],
+
+        // Clear Page button
+        if (activeTab.annotations.containsKey(_currentPage) &&
+            (activeTab.annotations[_currentPage]?.isNotEmpty ?? false)) ...[
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_rounded, size: 17),
+            tooltip: 'Bu Sayfadaki Çizimleri Temizle',
+            onPressed: () =>
+                _confirmClearPageAnnotations(activeTab, _currentPage),
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            color: Colors.redAccent,
+          ),
+        ],
+      ],
     );
   }
 
@@ -1736,6 +2347,21 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
           onPressed: _toggleSearch,
         ),
         IconButton(
+          icon: Icon(
+            _activeAnnotationTool == AnnotationTool.none
+                ? Icons.edit_note_rounded
+                : (_activeAnnotationTool == AnnotationTool.highlighter
+                    ? Icons.border_color_rounded
+                    : Icons.edit_rounded),
+            size: 21,
+            color: _activeAnnotationTool != AnnotationTool.none
+                ? Theme.of(context).colorScheme.primary
+                : null,
+          ),
+          tooltip: 'Vurgulayıcı & Kalem',
+          onPressed: () => _showMobileAnnotationBottomSheet(context, activeTab),
+        ),
+        IconButton(
           icon: const Icon(Icons.share_rounded, size: 21),
           tooltip: 'Paylaş',
           onPressed: _shareActiveDocument,
@@ -1917,11 +2543,14 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
 
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 540),
+              child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
@@ -2059,10 +2688,25 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
               ),
             ),
           ),
-        ),
+          if (_recentDocuments.isNotEmpty)
+            RecentDocumentsView(
+              recentDocuments: _recentDocuments,
+              onOpenFile: (path) => _checkAndOpenFile(path),
+              onRemoveFile: (path) async {
+                await RecentDocumentsService.removeDocument(path);
+                _loadRecentDocuments();
+              },
+              onClearAll: () async {
+                await RecentDocumentsService.clearAll();
+                _loadRecentDocuments();
+              },
+              isDark: isDark,
+            ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildShortcutHint(String keys, String label, bool isDark) {
     return Column(
@@ -2273,10 +2917,36 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       key: ValueKey(tab.id),
       controller: tab.controller,
       params: PdfViewerParams(
+        panEnabled: _activeAnnotationTool == AnnotationTool.none,
+        scrollPhysics: _activeAnnotationTool == AnnotationTool.none
+            ? null
+            : const NeverScrollableScrollPhysics(),
         pagePaintCallbacks: [
           (canvas, pageRect, page) {
             tab.textSearcher?.pageTextMatchPaintCallback(canvas, pageRect, page);
           },
+        ],
+        pageOverlaysBuilder: (context, rectExternal, page) => [
+          PdfPageAnnotationOverlay(
+            pageNumber: page.pageNumber,
+            pageSize: Size(rectExternal.width, rectExternal.height),
+            strokes: tab.annotations[page.pageNumber] ?? [],
+            activeTool: _activeAnnotationTool,
+            selectedColor: _activeAnnotationTool == AnnotationTool.highlighter
+                ? _selectedHighlighterColor
+                : _selectedPenColor,
+            strokeWidth: _activeAnnotationTool == AnnotationTool.highlighter
+                ? _highlighterWidth
+                : _penWidth,
+            onStrokeAdded: (stroke) =>
+                _onStrokeAdded(tab, page.pageNumber, stroke),
+            onErase: (localPos) => _onEraseAtPoint(
+              tab,
+              page.pageNumber,
+              localPos,
+              Size(rectExternal.width, rectExternal.height),
+            ),
+          ),
         ],
         backgroundColor: isDark
             ? const Color(0xFF0F1012)
