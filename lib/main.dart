@@ -243,7 +243,11 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
       if (result is List && result.isNotEmpty) {
         for (final item in result) {
           if (item != null && item.toString().trim().isNotEmpty) {
-            _checkAndOpenFile(item.toString());
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _checkAndOpenFile(item.toString());
+              }
+            });
           }
         }
       }
@@ -354,10 +358,15 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
     try {
       final f = File(path);
       if (f.existsSync() && f.lengthSync() > 5) {
-        final header = String.fromCharCodes(f.openSync().readSync(5));
-        if (!header.startsWith('%PDF-')) {
-          _showInvalidFormatDialog(path);
-          return;
+        final raf = f.openSync();
+        try {
+          final header = String.fromCharCodes(raf.readSync(5));
+          if (!header.startsWith('%PDF-')) {
+            _showInvalidFormatDialog(path);
+            return;
+          }
+        } finally {
+          raf.closeSync();
         }
       }
     } catch (_) {}
@@ -2912,212 +2921,256 @@ class _PdfViewerHomeScreenState extends State<PdfViewerHomeScreen> {
   }
 
   Widget _buildPdfViewerForTab(PdfTab tab, bool isDark) {
-    return PdfViewer.file(
-      tab.filePath,
-      key: ValueKey(tab.id),
-      controller: tab.controller,
-      params: PdfViewerParams(
-        panEnabled: _activeAnnotationTool == AnnotationTool.none,
-        scrollPhysics: _activeAnnotationTool == AnnotationTool.none
-            ? null
-            : const NeverScrollableScrollPhysics(),
-        pagePaintCallbacks: [
-          (canvas, pageRect, page) {
-            tab.textSearcher?.pageTextMatchPaintCallback(canvas, pageRect, page);
-          },
-        ],
-        pageOverlaysBuilder: (context, rectExternal, page) => [
-          PdfPageAnnotationOverlay(
-            pageNumber: page.pageNumber,
-            pageSize: Size(rectExternal.width, rectExternal.height),
-            strokes: tab.annotations[page.pageNumber] ?? [],
-            activeTool: _activeAnnotationTool,
-            selectedColor: _activeAnnotationTool == AnnotationTool.highlighter
-                ? _selectedHighlighterColor
-                : _selectedPenColor,
-            strokeWidth: _activeAnnotationTool == AnnotationTool.highlighter
-                ? _highlighterWidth
-                : _penWidth,
-            onStrokeAdded: (stroke) =>
-                _onStrokeAdded(tab, page.pageNumber, stroke),
-            onErase: (localPos) => _onEraseAtPoint(
-              tab,
-              page.pageNumber,
-              localPos,
-              Size(rectExternal.width, rectExternal.height),
-            ),
-          ),
-        ],
-        backgroundColor: isDark
-            ? const Color(0xFF0F1012)
-            : const Color(0xFFE5E7EB),
-        pageDropShadow: BoxShadow(
-          color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.2),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-        margin: 16,
-        viewerOverlayBuilder: (context, size, handleLinkTap) => [
-          PdfViewerScrollThumb(
-            controller: tab.controller,
-            orientation: ScrollbarOrientation.right,
-            thumbSize: const Size(32, 48),
-            margin: 6,
-            thumbBuilder: (context, thumbSize, pageNumber, controller) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF2E333D).withValues(alpha: 0.92)
-                      : const Color(0xFF1E293B).withValues(alpha: 0.88),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth <= 0 || constraints.maxHeight <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        return PdfViewer.file(
+          tab.filePath,
+          key: ValueKey(tab.id),
+          controller: tab.controller,
+          params: PdfViewerParams(
+            panEnabled: _activeAnnotationTool == AnnotationTool.none,
+            scrollPhysics: _activeAnnotationTool == AnnotationTool.none
+                ? null
+                : const NeverScrollableScrollPhysics(),
+            loadingBannerBuilder: (context, bytesLoaded, totalBytes) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        value: (totalBytes != null && totalBytes > 0)
+                            ? bytesLoaded / totalBytes
+                            : null,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Belge yükleniyor...',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
-                child: Center(
-                  child: Text(
-                    '${pageNumber ?? 1}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
               );
             },
-          ),
-          PdfViewerScrollThumb(
-            controller: tab.controller,
-            orientation: ScrollbarOrientation.bottom,
-            thumbSize: const Size(48, 8),
-            margin: 4,
-            thumbBuilder: (context, thumbSize, pageNumber, controller) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF3B404D).withValues(alpha: 0.6)
-                      : const Color(0xFF64748B).withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(4),
+            pagePaintCallbacks: [
+              (canvas, pageRect, page) {
+                tab.textSearcher?.pageTextMatchPaintCallback(canvas, pageRect, page);
+              },
+            ],
+            pageOverlaysBuilder: (context, rectExternal, page) => [
+              PdfPageAnnotationOverlay(
+                pageNumber: page.pageNumber,
+                pageSize: Size(rectExternal.width, rectExternal.height),
+                strokes: tab.annotations[page.pageNumber] ?? [],
+                activeTool: _activeAnnotationTool,
+                selectedColor: _activeAnnotationTool == AnnotationTool.highlighter
+                    ? _selectedHighlighterColor
+                    : _selectedPenColor,
+                strokeWidth: _activeAnnotationTool == AnnotationTool.highlighter
+                    ? _highlighterWidth
+                    : _penWidth,
+                onStrokeAdded: (stroke) =>
+                    _onStrokeAdded(tab, page.pageNumber, stroke),
+                onErase: (localPos) => _onEraseAtPoint(
+                  tab,
+                  page.pageNumber,
+                  localPos,
+                  Size(rectExternal.width, rectExternal.height),
                 ),
-              );
-            },
-          ),
-        ],
-        errorBannerBuilder: (context, error, stackTrace, documentRef) {
-          return Center(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 460),
-              margin: const EdgeInsets.all(24),
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E2024) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.redAccent.withValues(alpha: 0.3),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: Colors.redAccent,
-                    size: 52,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'PDF Açılamadı',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Bu dosya geçerli veya okunabilir bir PDF formatında değil (FPDF_ERR_FORMAT).\nLütfen geçerli bir PDF belgesi seçin.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () => _closeTab(_tabs.indexOf(tab)),
-                        child: const Text('Kapat'),
+            ],
+            backgroundColor: isDark
+                ? const Color(0xFF0F1012)
+                : const Color(0xFFE5E7EB),
+            pageDropShadow: BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+            margin: 16,
+            viewerOverlayBuilder: (context, size, handleLinkTap) => [
+              PdfViewerScrollThumb(
+                controller: tab.controller,
+                orientation: ScrollbarOrientation.right,
+                thumbSize: const Size(32, 48),
+                margin: 6,
+                thumbBuilder: (context, thumbSize, pageNumber, controller) {
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF2E333D).withValues(alpha: 0.92)
+                          : const Color(0xFF1E293B).withValues(alpha: 0.88),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        width: 1,
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: _pickAndOpenFile,
-                        icon: const Icon(Icons.file_open_rounded, size: 18),
-                        label: const Text('Başka Dosya Seç'),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${pageNumber ?? 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              PdfViewerScrollThumb(
+                controller: tab.controller,
+                orientation: ScrollbarOrientation.bottom,
+                thumbSize: const Size(48, 8),
+                margin: 4,
+                thumbBuilder: (context, thumbSize, pageNumber, controller) {
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF3B404D).withValues(alpha: 0.6)
+                          : const Color(0xFF64748B).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  );
+                },
+              ),
+            ],
+            errorBannerBuilder: (context, error, stackTrace, documentRef) {
+              return Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  margin: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E2024) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.redAccent.withValues(alpha: 0.3),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-          );
-        },
-        onViewerReady: (document, controller) {
-          tab.document = document;
-          tab.totalPages = document.pages.length;
-          if (tab.textSearcher == null) {
-            tab.textSearcher = PdfTextSearcher(controller);
-            tab.textSearcher!.addListener(() {
-              if (mounted && _activeTab == tab) {
-                setState(() {});
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: Colors.redAccent,
+                        size: 52,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'PDF Açılamadı',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Bu dosya geçerli veya okunabilir bir PDF formatında değil (FPDF_ERR_FORMAT).\nLütfen geçerli bir PDF belgesi seçin.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => _closeTab(_tabs.indexOf(tab)),
+                            child: const Text('Kapat'),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            onPressed: _pickAndOpenFile,
+                            icon: const Icon(Icons.file_open_rounded, size: 18),
+                            label: const Text('Başka Dosya Seç'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            onViewerReady: (document, controller) {
+              tab.document = document;
+              tab.totalPages = document.pages.length;
+              if (tab.textSearcher == null) {
+                tab.textSearcher = PdfTextSearcher(controller);
+                tab.textSearcher!.addListener(() {
+                  if (mounted && _activeTab == tab) {
+                    setState(() {});
+                  }
+                });
+                if (_isSearchVisible && _searchController.text.trim().isNotEmpty) {
+                  tab.textSearcher!.startTextSearch(_searchController.text.trim());
+                }
               }
-            });
-            if (_isSearchVisible && _searchController.text.trim().isNotEmpty) {
-              tab.textSearcher!.startTextSearch(_searchController.text.trim());
-            }
-          }
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || !controller.isReady) return;
-            final matrix = controller.calcMatrixFitWidthForPage(pageNumber: tab.currentPage);
-            if (matrix != null) {
-              controller.value = matrix;
-            }
-            setState(() {
-              tab.zoomRatio = controller.currentZoom;
-            });
-          });
-        },
-        onPageChanged: (pageNumber) {
-          if (pageNumber != null && pageNumber != tab.currentPage) {
-            setState(() {
-              tab.currentPage = pageNumber;
-            });
-            if (tab == _activeTab) {
-              _scrollToThumbnail(pageNumber);
-            }
-          }
-        },
-      ),
+              void applyFit() {
+                if (!mounted) return;
+                if (controller.isReady) {
+                  final matrix = controller.calcMatrixFitWidthForPage(pageNumber: tab.currentPage);
+                  if (matrix != null) {
+                    controller.value = matrix;
+                  }
+                  if (mounted) {
+                    setState(() {
+                      tab.zoomRatio = controller.currentZoom;
+                    });
+                  }
+                } else {
+                  Future.delayed(const Duration(milliseconds: 100), applyFit);
+                }
+              }
+              WidgetsBinding.instance.addPostFrameCallback((_) => applyFit());
+            },
+            onPageChanged: (pageNumber) {
+              if (pageNumber != null && pageNumber != tab.currentPage) {
+                setState(() {
+                  tab.currentPage = pageNumber;
+                });
+                if (tab == _activeTab) {
+                  _scrollToThumbnail(pageNumber);
+                }
+              }
+            },
+          ),
+        );
+      },
     );
   }
 

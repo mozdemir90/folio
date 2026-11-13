@@ -3,6 +3,8 @@ package com.folio.pdfreader
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -15,6 +17,9 @@ class MainActivity : FlutterActivity() {
     private var methodChannel: MethodChannel? = null
     private val pendingFilePaths = mutableListOf<String>()
     private var isDartReady = false
+    private var isResolvingIntent = false
+    private var pendingGetInitialFilesResult: MethodChannel.Result? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -25,9 +30,26 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getInitialFiles" -> {
                     isDartReady = true
-                    val files = ArrayList(pendingFilePaths)
-                    pendingFilePaths.clear()
-                    result.success(files)
+                    if (isResolvingIntent) {
+                        // Cold start: file is actively being copied in background thread.
+                        // Hold the result until copying is finished instead of returning empty list!
+                        pendingGetInitialFilesResult = result
+
+                        // Safety fallback: if stream takes longer than 6 seconds, resolve with whatever we have
+                        mainHandler.postDelayed({
+                            pendingGetInitialFilesResult?.let { pending ->
+                                isResolvingIntent = false
+                                val files = ArrayList(pendingFilePaths)
+                                pendingFilePaths.clear()
+                                pending.success(files)
+                                pendingGetInitialFilesResult = null
+                            }
+                        }, 6000)
+                    } else {
+                        val files = ArrayList(pendingFilePaths)
+                        pendingFilePaths.clear()
+                        result.success(files)
+                    }
                 }
                 "shareFile" -> {
                     val filePath = call.argument<String>("path")
@@ -117,21 +139,42 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun copyUriToCacheAndDispatch(uri: Uri) {
+        isResolvingIntent = true
         Thread {
             try {
                 val filePath = resolveOrCopyUri(uri)
-                if (filePath != null) {
-                    runOnUiThread {
-                        val channel = methodChannel
-                        if (isDartReady && channel != null) {
-                            channel.invokeMethod("onOpenFiles", listOf(filePath))
+                mainHandler.post {
+                    isResolvingIntent = false
+                    val pendingResult = pendingGetInitialFilesResult
+                    if (pendingResult != null) {
+                        // Dart called getInitialFiles during cold start: resolve it directly!
+                        pendingGetInitialFilesResult = null
+                        if (filePath != null) {
+                            pendingResult.success(listOf(filePath))
                         } else {
-                            pendingFilePaths.add(filePath)
+                            pendingResult.success(emptyList<String>())
+                        }
+                    } else {
+                        // Dart already initialized earlier or app was in background
+                        if (filePath != null) {
+                            val channel = methodChannel
+                            if (isDartReady && channel != null) {
+                                channel.invokeMethod("onOpenFiles", listOf(filePath))
+                            } else {
+                                pendingFilePaths.add(filePath)
+                            }
                         }
                     }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                mainHandler.post {
+                    isResolvingIntent = false
+                    pendingGetInitialFilesResult?.let {
+                        it.success(emptyList<String>())
+                        pendingGetInitialFilesResult = null
+                    }
+                }
             }
         }.start()
     }
@@ -174,6 +217,10 @@ class MainActivity : FlutterActivity() {
         contentResolver.openInputStream(uri)?.use { input ->
             FileOutputStream(targetFile).use { output ->
                 input.copyTo(output)
+                output.flush()
+                try {
+                    output.fd.sync()
+                } catch (_: Exception) {}
             }
         }
 
